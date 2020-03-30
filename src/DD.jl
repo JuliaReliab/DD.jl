@@ -1,5 +1,13 @@
+"""
+Module: DD (Decision Diagram)
+"""
+
 module DD
 
-greet() = print("Hello World!")
+include("_domain.jl")
+include("_dd.jl")
+include("_dot.jl")
 
-end # module
+include("_bdd.jl")
+
+end

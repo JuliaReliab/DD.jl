@@ -66,7 +66,7 @@ Draw a diagram in Jupyter environemnt.
 function ddview(forest::AbstractDDForest{Tv,Ti,Tl},
         f::DDVariable{Tv,Ti,N})::Nothing where {Tv,Ti,Tl,N}
     bdd = PydotPlus.graph_from_dot_data(todot(forest, f))
-    bdd.progs = Dict("dot" => "$(ENV["HOME"])/.julia/conda/3/bin/dot")
+    bdd.progs = Dict("dot" => "$(Conda.BINDIR)/dot")
     display("image/png", Vector{UInt8}(bdd.create_png()))
 end
 

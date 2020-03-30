@@ -28,7 +28,7 @@ using Test
 end
 
 @testset "DDtest2" begin
-    # @test DD.PydotPlus != PyCall.PyPtr_NULL
+    @test DD.PydotPlus != PyCall.PyPtr_NULL
     # forest = BDDForest{Int,Int,Int}(FullyReduced())
     # defval!(forest, 0)
     # defval!(forest, 1)

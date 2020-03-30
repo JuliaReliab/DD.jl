@@ -6,10 +6,10 @@ dot for DD
 """
 
 using PyCall
-using Conda
 
-Conda.add("python-graphviz", channel="conda-forge")
-Conda.add("pydotplus", channel="conda-forge")
+# using Conda
+# Conda.add("python-graphviz", channel="conda-forge")
+# Conda.add("pydotplus", channel="conda-forge")
 
 const PydotPlus = pyimport("pydotplus")
 

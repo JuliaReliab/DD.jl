@@ -6,12 +6,15 @@ dot for DD
 """
 
 using PyCall
+using Conda
+Conda.add("python-graphviz", channel="conda-forge")
+Conda.add("pydotplus", channel="conda-forge")
 
-# using Conda
-# Conda.add("python-graphviz", channel="conda-forge")
-# Conda.add("pydotplus", channel="conda-forge")
+const PydotPlus = PyNULL()
 
-const PydotPlus = pyimport("pydotplus")
+function __init__()
+    copy!(PydotPlus, pyimport_conda("pydotplus", "pydotplus"))
+end
 
 """
 todot(forest, f)
@@ -63,6 +66,7 @@ Draw a diagram in Jupyter environemnt.
 function ddview(forest::AbstractDDForest{Tv,Ti,Tl},
         f::DDVariable{Tv,Ti,N})::Nothing where {Tv,Ti,Tl,N}
     bdd = PydotPlus.graph_from_dot_data(todot(forest, f))
+    bdd.progs = Dict("dot" => "$(ENV["HOME"])/.julia/conda/3/bin/dot")
     display("image/png", Vector{UInt8}(bdd.create_png()))
 end
 

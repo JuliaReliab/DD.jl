@@ -5,6 +5,7 @@ Module: DD (Decision Diagram)
 export FullyReduced, QuasiReduced
 export defvar!, defval!
 export ddval!, ddvar!
+export AbstractDDNode, DDVariable, DDValue
 
 using Printf
 

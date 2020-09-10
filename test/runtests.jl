@@ -48,3 +48,17 @@ end
     # ddview(forest, f2)
     # ddview(forest, f3)
 end
+
+@testset "DDtest3" begin
+    forest = BDDForest{Int,Int,Int}(FullyReduced())
+    defval!(forest, 0)
+    defval!(forest, 1)
+    defvar!(forest, :x, 3, domain(0:1))
+    defvar!(forest, :y, 2, domain(0:1))
+    defvar!(forest, :z, 1, domain(0:1))
+    vars = bddvars!(forest, 0, 1)
+    f1 = bddand!(forest, vars[:x], vars[:y])
+    f2 = bddor!(forest, vars[:x], vars[:y])
+    f3 = bddite!(forest, vars[:x], vars[:y], vars[:z])
+    println(f3)
+end

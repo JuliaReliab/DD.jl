@@ -113,7 +113,7 @@ Show
 # end
 
 function Base.show(io::IO, f::DDValue{Tv,Ti}) where {Tv,Ti}
-    println(io, f.val)
+    Base.show(io, f.val)
 end
 
 function Base.show(io::IO, ::MIME"text/plain", f::DDVariable{Tv,Ti,N}) where {Tv,Ti,N}

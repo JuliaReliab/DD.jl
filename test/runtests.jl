@@ -1,5 +1,4 @@
 using DD
-using PyCall
 using Test
 
 @testset "DDtest1" begin
@@ -28,7 +27,8 @@ using Test
 end
 
 @testset "DDtest2" begin
-    @test DD.PydotPlus != PyCall.PyPtr_NULL
+    # ddview is deleted
+    # @test DD.PydotPlus != PyCall.PyPtr_NULL
     forest = BDDForest{Int,Int,Int}(FullyReduced())
     defval!(forest, 0)
     defval!(forest, 1)
@@ -36,13 +36,15 @@ end
     defvar!(forest, :y, 2, domain(0:1))
     defvar!(forest, :z, 1, domain(0:1))
     vars = bddvars!(forest, 0, 1)
-    ddview(forest, vars[:x])
-    ddview(forest, vars[:y])
-    ddview(forest, vars[:z])
+    # ddview is deleted to ensure the running environment
+    # ddview(forest, vars[:x])
+    # ddview(forest, vars[:y])
+    # ddview(forest, vars[:z])
     f1 = bddand!(forest, vars[:x], vars[:y])
     f2 = bddor!(forest, vars[:x], vars[:y])
     f3 = bddite!(forest, vars[:x], vars[:y], vars[:z])
-    ddview(forest, f1)
-    ddview(forest, f2)
-    ddview(forest, f3)
+    # ddview is deleted to ensure the running environment
+    # ddview(forest, f1)
+    # ddview(forest, f2)
+    # ddview(forest, f3)
 end

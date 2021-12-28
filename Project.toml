@@ -1,10 +1,9 @@
 name = "DD"
 uuid = "dbd003b0-366b-4bd7-bab8-1704c0e14406"
 authors = ["Hiroyuki Okamura"]
-version = "0.3.0"
+version = "0.4.0"
 
 [deps]
-Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
 [compat]
 julia = "1"

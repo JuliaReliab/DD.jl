@@ -1,13 +1,24 @@
-export BDD, var, not, and, or, xor, imp, ite, todot
+"""
+BDD Module
+"""
+
+module BDD
+
+import Base
+export bdd, header!, var!, node!, not, and, or, xor, imp, ite, todot
 
 """
-AbstractBDDNode{Ts}
+AbstractNode{Ts}
 
 An abstract node for BDD. The parameter Ts represents a type for a symbol of variable.
 Ts is usually Symbol.
 """
 
-abstract type AbstractBDDNode{Ts} end
+abstract type AbstractNode{Ts} end
+
+function Base.show(io::IO, n::AbstractNode{Ts}) where Ts
+    Base.show(io, "node$(n.id)")
+end
 
 """
 type alias
@@ -15,150 +26,221 @@ type alias
 
 const HeaderID = UInt
 const NodeID = UInt
-const UniqueTable{Ts} = Dict{Tuple{HeaderID,NodeID,NodeID},AbstractBDDNode{Ts}}
-const UniCache{Ts} = Dict{NodeID,AbstractBDDNode{Ts}}
-const BinCache{Ts} = Dict{Tuple{NodeID,NodeID},AbstractBDDNode{Ts}}
 
 """
-BDDNodeHeader{Ts}
-
-The structure is to store the information on BDD node.
+struct
 """
 
-struct BDDNodeHeader{Ts}
+struct NodeHeader{Ts}
     id::HeaderID
     level::Int
     label::Ts
 end
 
-struct BDDNode{Ts} <: AbstractBDDNode{Ts}
+struct Node{Ts} <: AbstractNode{Ts}
     id::NodeID
-    header::BDDNodeHeader{Ts}
-    low::AbstractBDDNode{Ts}
-    high::AbstractBDDNode{Ts}
+    header::NodeHeader{Ts}
+    low::AbstractNode{Ts}
+    high::AbstractNode{Ts}
 end
 
-struct BDDTerminal{Ts} <: AbstractBDDNode{Ts}
+struct Terminal{Ts} <: AbstractNode{Ts}
     id::NodeID
 end
-
-abstract type AbstractBDDOperator end
-
-struct BDDNot <: AbstractBDDOperator end
-struct BDDAnd <: AbstractBDDOperator end
-struct BDDOr <: AbstractBDDOperator end
-struct BDDXor <: AbstractBDDOperator end
 
 """
-BDDManager
-
-The structure to issue the NodeID,
+Operators
 """
 
-mutable struct BDDManager
-    nodeid::NodeID
-    varid::HeaderID
-    maxlevel::Int
+abstract type AbstractOperator end
+
+struct BDDNot <: AbstractOperator end
+struct BDDAnd <: AbstractOperator end
+struct BDDOr <: AbstractOperator end
+struct BDDXor <: AbstractOperator end
+
+struct UniOperator{Ts}
+    op::AbstractOperator
+    cache::Dict{NodeID,AbstractNode{Ts}}
 end
 
-function BDDManager()
-    BDDManager(0, 0, 0)
+struct BinOperator{Ts}
+    op::AbstractOperator
+    cache::Dict{Tuple{NodeID,NodeID},AbstractNode{Ts}}
 end
 
-function headerid!(m::BDDManager)
-    id = m.varid
-    m.varid += 1
+"""
+BDDForest
+
+A structure to store the information on BDD.
+
+Todo: Get rid of `mutable` (export `totalnodeid` to BDDNodeManager?)
+"""
+
+mutable struct BDDForest{Ts}
+    totalnodeid::NodeID
+    vars::Vector{NodeHeader{Ts}}
+    headers::Dict{Ts,NodeHeader{Ts}}
+    utable::Dict{Tuple{HeaderID,NodeID,NodeID},AbstractNode{Ts}}
+    zero::Terminal{Ts}
+    one::Terminal{Ts}
+    notop::UniOperator{Ts}
+    andop::BinOperator{Ts}
+    orop::BinOperator{Ts}
+    xorop::BinOperator{Ts}
+end
+
+function bdd(::Type{Ts} = Symbol) where Ts
+    zero = Terminal{Ts}(0)
+    one = Terminal{Ts}(1)
+    start_node_id::NodeID = 2
+    v = Vector{NodeHeader{Ts}}[]
+    h = Dict{Ts,NodeHeader{Ts}}()
+    ut = Dict{Tuple{HeaderID,NodeID,NodeID},AbstractNode{Ts}}()
+    notop = UniOperator{Ts}(BDDNot(), Dict{NodeID,AbstractNode{Ts}}())
+    andop = BinOperator{Ts}(BDDAnd(), Dict{Tuple{NodeID,NodeID},AbstractNode{Ts}}())
+    orop = BinOperator{Ts}(BDDOr(), Dict{Tuple{NodeID,NodeID},AbstractNode{Ts}}())
+    xorop = BinOperator{Ts}(BDDXor(), Dict{Tuple{NodeID,NodeID},AbstractNode{Ts}}())
+    b = BDDForest{Ts}(2, v, h, ut, zero, one, notop, andop, orop, xorop)
+end
+
+function get_next_nodeid!(b::BDDForest{Ts}) where Ts
+    id = b.totalnodeid
+    b.totalnodeid += 1
     id
 end
 
-function level!(m::BDDManager)
-    m.maxlevel += 1
-end
-
-function nodeid!(m::BDDManager)
-    id = m.nodeid
-    m.nodeid += 1
-    id
-end
-
-
 """
-BDD{Ts}
+header!
 
-The structure for BDD. This includes all the nodes and caches.
+Get a header for a variable on BDD with a label
 """
 
-struct BDD{Ts}
-    manager::BDDManager
-    headers::Dict{Ts,BDDNodeHeader{Ts}}
-    utable::UniqueTable{Ts}
-    zero::BDDTerminal{Ts}
-    one::BDDTerminal{Ts}
-    notcache::UniCache{Ts}
-    andcache::BinCache{Ts}
-    orcache::BinCache{Ts}
-    xorcache::BinCache{Ts}
-end
-
-import Base
-
-function Base.show(io::IO, n::AbstractBDDNode{Ts}) where Ts
-    Base.show(io, "node$(n.id)")
-end
-
-function BDD(::Type{Ts} = Symbol) where Ts
-    manager = BDDManager()
-    zero = BDDTerminal{Ts}(nodeid!(manager))
-    one = BDDTerminal{Ts}(nodeid!(manager))
-    BDD{Ts}(
-        manager,
-        Dict{Ts,BDDNodeHeader{Ts}}(),
-        UniqueTable{Ts}(),
-        zero,
-        one,
-        UniCache{Ts}(),
-        BinCache{Ts}(),
-        BinCache{Ts}(),
-        BinCache{Ts}()
-    )
-end
-
-function var(b::BDD{Ts}, label::Ts)::AbstractBDDNode{Ts} where Ts
+function header!(b::BDDForest{Ts}, label::Ts)::NodeHeader{Ts} where Ts
     h = get(b.headers, label) do
-        h = BDDNodeHeader(headerid!(b.manager), level!(b.manager), label)
+        h = NodeHeader{Ts}(HeaderID(length(b.vars)), length(b.vars), label)
+        push!(b.vars, h)
         b.headers[label] = h
     end
-    _node(b, h, b.zero, b.one)
+    h
 end
 
-function _node(b::BDD{Ts}, h::BDDNodeHeader{Ts}, low::AbstractBDDNode{Ts}, high::AbstractBDDNode{Ts})::AbstractBDDNode{Ts} where Ts
+"""
+var!
+
+Get a node for a variable
+"""
+
+function var!(b::BDDForest{Ts}, label::Ts)::AbstractNode{Ts} where Ts
+    h = header!(b, label)
+    node!(b, h, b.zero, b.one)
+end
+
+"""
+node!
+
+Create a BDD node
+"""
+
+function node!(b::BDDForest{Ts}, h::NodeHeader{Ts}, low::AbstractNode{Ts}, high::AbstractNode{Ts})::AbstractNode{Ts} where Ts
     if low.id == high.id
         return low
     end
     key = (h.id, low.id, high.id)
     get(b.utable, key) do
-        b.utable[key] = BDDNode(nodeid!(b.manager), h, low, high)
+        nextid = get_next_nodeid!(b)
+        b.utable[key] = Node(nextid, h, low, high)
     end
 end
 
-### uni
+"""
+not
 
-function not(b::BDD{Ts}, f::AbstractBDDNode{Ts}) where Ts
-    _uniapply(BDDNot(), b.notcache, b, f)
+Return a node of negation for a given node.
+"""
+
+function not(b::BDDForest{Ts}, f::AbstractNode{Ts}) where Ts
+    uniapply!(b.notop, b, f)
 end
 
-### primitive
+"""
+and
 
-function _uniapply(op::AbstractBDDOperator, cache::UniCache{Ts}, b::BDD{Ts}, f::BDDNode{Ts})::AbstractBDDNode{Ts} where Ts
-    get(cache, f.id) do
-        n0 = _uniapply(op, cache, b, f.low)
-        n1 = _uniapply(op, cache, b, f.high)
-        ans = _node(b, f.header, n0, n1)
-        cache[f.id] = ans
+Return a node of AND for given nodes
+"""
+
+function and(b::BDDForest{Ts}, f::Vararg{AbstractNode{Ts}}) where Ts
+    ans = b.one
+    for i = 1:length(f)
+        ans = binapply!(b.andop, b, ans, f[i])
+    end
+    ans
+end
+
+"""
+or
+
+Return a node of OR for given nodes
+"""
+
+function or(b::BDDForest{Ts}, f::Vararg{AbstractNode{Ts}}) where Ts
+    ans = b.zero
+    for i = 1:length(f)
+        ans = binapply!(b.orop, b, ans, f[i])
+    end
+    ans
+end
+
+"""
+xor
+
+Return a node of XOR for given two nodes
+"""
+
+function xor(b::BDDForest{Ts}, f::AbstractNode{Ts}, g::AbstractNode{Ts}) where Ts
+    binapply!(b.xorop, b, f, g)
+end
+
+"""
+imp
+
+Return a node of IMP for given two nodes
+"""
+
+function imp(b::BDDForest{Ts}, f::AbstractNode{Ts}, g::AbstractNode{Ts}) where Ts
+    or(b, not(b, f), g)
+end
+
+"""
+imp
+
+Return a node of if-then-else for given three nodes
+"""
+
+function ite(b::BDDForest{Ts}, f::AbstractNode{Ts}, g::AbstractNode{Ts}, h::AbstractNode{Ts}) where Ts
+    or(b, and(b, f, g), and(b, not(b, f), h))
+end
+
+"""
+uniapply
+
+Apply operation for unioperator
+"""
+
+function uniapply!(op::UniOperator{Ts}, b::BDDForest{Ts}, f::AbstractNode{Ts})::AbstractNode{Ts} where Ts
+    return _uniapply!(op.op, op, b, f)
+end
+
+function _uniapply!(::AbstractOperator, op::UniOperator{Ts}, b::BDDForest{Ts}, f::Node{Ts})::AbstractNode{Ts} where Ts
+    get(op.cache, f.id) do
+        n0 = _uniapply!(op.op, op, b, f.low)
+        n1 = _uniapply!(op.op, op, b, f.high)
+        ans = node!(b, f.header, n0, n1)
+        op.cache[f.id] = ans
     end
 end
 
-function _uniapply(::BDDNot, ::UniCache{Ts}, b::BDD{Ts}, f::BDDTerminal{Ts})::AbstractBDDNode{Ts} where Ts
+function _uniapply!(::BDDNot, op::UniOperator{Ts}, b::BDDForest{Ts}, f::Terminal{Ts})::AbstractNode{Ts} where Ts
     if f == b.one
         b.zero
     else
@@ -166,79 +248,57 @@ function _uniapply(::BDDNot, ::UniCache{Ts}, b::BDD{Ts}, f::BDDTerminal{Ts})::Ab
     end
 end
 
-### binoperator
+"""
+binapply
 
-function and(b::BDD{Ts}, f::Vararg{AbstractBDDNode{Ts}}) where Ts
-    ans = b.one
-    for x = f
-        ans = _binapply(BDDAnd(), b.andcache, b, ans, x)
-    end
-    ans
+Apply operation for binoperator
+"""
+
+function binapply!(op::BinOperator{Ts}, b::BDDForest{Ts}, f::AbstractNode{Ts}, g::AbstractNode{Ts})::AbstractNode{Ts} where Ts
+    return _binapply!(op.op, op, b, f, g)
 end
 
-function or(b::BDD{Ts}, f::Vararg{AbstractBDDNode{Ts}}) where Ts
-    ans = b.zero
-    for x = f
-        ans = _binapply(BDDOr(), b.orcache, b, ans, x)
-    end
-    ans
-end
-
-function xor(b::BDD{Ts}, f::AbstractBDDNode{Ts}, g::AbstractBDDNode{Ts}) where Ts
-    _binapply(BDDXor(), b.xorcache, b, f, g)
-end
-
-function imp(b::BDD{Ts}, f::AbstractBDDNode{Ts}, g::AbstractBDDNode{Ts}) where Ts
-    or(b, not(b, f), g)
-end
-
-function ite(b::BDD{Ts}, f::AbstractBDDNode{Ts}, g::AbstractBDDNode{Ts}, h::AbstractBDDNode{Ts}) where Ts
-    or(b, and(b, f, g), and(b, not(b, f), h))
-end
-
-### primitive
-
-function _binapply(op::AbstractBDDOperator, cache::BinCache{Ts}, b::BDD{Ts}, f::BDDNode{Ts}, g::BDDNode{Ts})::AbstractBDDNode{Ts} where Ts
+function _binapply!(::AbstractOperator, op::BinOperator{Ts}, b::BDDForest{Ts}, f::Node{Ts}, g::Node{Ts})::AbstractNode{Ts} where Ts
     key = (f.id, g.id)
-    get(cache, key) do
+    get(op.cache, key) do
         if f.header.level > g.header.level
-            n0 = _binapply(op, cache, b, f.low, g)
-            n1 = _binapply(op, cache, b, f.high, g)
-            ans = _node(b, f.header, n0, n1)
+            n0 = _binapply!(op.op, op, b, f.low, g)
+            n1 = _binapply!(op.op, op, b, f.high, g)
+            ans = node!(b, f.header, n0, n1)
         elseif f.header.level < g.header.level
-            n0 = _binapply(op, cache, b, f, g.low)
-            n1 = _binapply(op, cache, b, f, g.high)
-            ans = _node(b, g.header, n0, n1)
+            n0 = _binapply!(op.op, op, b, f, g.low)
+            n1 = _binapply!(op.op, op, b, f, g.high)
+            ans = node!(b, g.header, n0, n1)
         else
-            n0 = _binapply(op, cache, b, f.low, g.low)
-            n1 = _binapply(op, cache, b, f.high, g.high)
-            ans = _node(b, f.header, n0, n1)
+            n0 = _binapply!(op.op, op, b, f.low, g.low)
+            n1 = _binapply!(op.op, op, b, f.high, g.high)
+            ans = node!(b, f.header, n0, n1)
         end
-        cache[key] = ans
+        op.cache[key] = ans
     end
 end
 
-function _binapply(op::AbstractBDDOperator, cache::BinCache{Ts}, b::BDD{Ts}, f::BDDTerminal{Ts}, g::BDDNode{Ts})::AbstractBDDNode{Ts} where Ts
+function _binapply!(::AbstractOperator, op::BinOperator{Ts}, b::BDDForest{Ts}, f::Terminal{Ts}, g::Node{Ts})::AbstractNode{Ts} where Ts
     key = (f.id, g.id)
-    get(cache, key) do
-        n0 = _binapply(op, cache, b, f, g.low)
-        n1 = _binapply(op, cache, b, f, g.high)
-        cache[key] = _node(b, g.header, n0, n1)
+    get(op.cache, key) do
+        n0 = _binapply!(op.op, op, b, f, g.low)
+        n1 = _binapply!(op.op, op, b, f, g.high)
+        op.cache[key] = node!(b, g.header, n0, n1)
     end
 end
 
-function _binapply(op::AbstractBDDOperator, cache::BinCache{Ts}, b::BDD{Ts}, f::BDDNode{Ts}, g::BDDTerminal{Ts})::AbstractBDDNode{Ts} where Ts
+function _binapply!(::AbstractOperator, op::BinOperator{Ts}, b::BDDForest{Ts}, f::Node{Ts}, g::Terminal{Ts})::AbstractNode{Ts} where Ts
     key = (f.id, g.id)
-    get(cache, key) do
-        n0 = _binapply(op, cache, b, f.low, g)
-        n1 = _binapply(op, cache, b, f.high, g)
-        cache[key] = _node(b, f.header, n0, n1)
+    get(op.cache, key) do
+        n0 = _binapply!(op.op, op, b, f.low, g)
+        n1 = _binapply!(op.op, op, b, f.high, g)
+        op.cache[key] = node!(b, f.header, n0, n1)
     end
 end
 
 ## and
 
-function _binapply(::BDDAnd, ::BinCache{Ts}, b::BDD{Ts}, f::BDDTerminal{Ts}, g::BDDNode{Ts})::AbstractBDDNode{Ts} where Ts
+function _binapply!(::BDDAnd, op::BinOperator{Ts}, b::BDDForest{Ts}, f::Terminal{Ts}, g::Node{Ts})::AbstractNode{Ts} where Ts
     if f == b.one
         g
     else
@@ -246,7 +306,7 @@ function _binapply(::BDDAnd, ::BinCache{Ts}, b::BDD{Ts}, f::BDDTerminal{Ts}, g::
     end
 end
 
-function _binapply(::BDDAnd, ::BinCache{Ts}, b::BDD{Ts}, f::BDDNode{Ts}, g::BDDTerminal{Ts})::AbstractBDDNode{Ts} where Ts
+function _binapply!(::BDDAnd, op::BinOperator{Ts}, b::BDDForest{Ts}, f::Node{Ts}, g::Terminal{Ts})::AbstractNode{Ts} where Ts
     if g == b.one
         f
     else
@@ -254,7 +314,7 @@ function _binapply(::BDDAnd, ::BinCache{Ts}, b::BDD{Ts}, f::BDDNode{Ts}, g::BDDT
     end
 end
 
-function _binapply(::BDDAnd, ::BinCache{Ts}, b::BDD{Ts}, f::BDDTerminal{Ts}, g::BDDTerminal{Ts})::AbstractBDDNode{Ts} where Ts
+function _binapply!(::BDDAnd, op::BinOperator{Ts}, b::BDDForest{Ts}, f::Terminal{Ts}, g::Terminal{Ts})::AbstractNode{Ts} where Ts
     if f == b.one && g == b.one
         b.one
     else
@@ -264,7 +324,7 @@ end
 
 ## or
 
-function _binapply(::BDDOr, ::BinCache{Ts}, b::BDD{Ts}, f::BDDTerminal{Ts}, g::BDDNode{Ts})::AbstractBDDNode{Ts} where Ts
+function _binapply!(::BDDOr, op::BinOperator{Ts}, b::BDDForest{Ts}, f::Terminal{Ts}, g::Node{Ts})::AbstractNode{Ts} where Ts
     if f == b.one
         b.one
     else
@@ -272,7 +332,7 @@ function _binapply(::BDDOr, ::BinCache{Ts}, b::BDD{Ts}, f::BDDTerminal{Ts}, g::B
     end
 end
 
-function _binapply(::BDDOr, ::BinCache{Ts}, b::BDD{Ts}, f::BDDNode{Ts}, g::BDDTerminal{Ts})::AbstractBDDNode{Ts} where Ts
+function _binapply!(::BDDOr, op::BinOperator{Ts}, b::BDDForest{Ts}, f::Node{Ts}, g::Terminal{Ts})::AbstractNode{Ts} where Ts
     if g == b.one
         b.one
     else
@@ -280,7 +340,7 @@ function _binapply(::BDDOr, ::BinCache{Ts}, b::BDD{Ts}, f::BDDNode{Ts}, g::BDDTe
     end
 end
 
-function _binapply(::BDDOr, ::BinCache{Ts}, b::BDD{Ts}, f::BDDTerminal{Ts}, g::BDDTerminal{Ts})::AbstractBDDNode{Ts} where Ts
+function _binapply!(::BDDOr, op::BinOperator{Ts}, b::BDDForest{Ts}, f::Terminal{Ts}, g::Terminal{Ts})::AbstractNode{Ts} where Ts
     if f == b.zero && g == b.zero
         b.zero
     else
@@ -290,7 +350,7 @@ end
 
 ## xor
 
-function _binapply(::BDDXor, ::BinCache{Ts}, b::BDD{Ts}, f::BDDTerminal{Ts}, g::BDDTerminal{Ts})::AbstractBDDNode{Ts} where Ts
+function _binapply!(::BDDXor, op::BinOperator{Ts}, b::BDDForest{Ts}, f::Terminal{Ts}, g::Terminal{Ts})::AbstractNode{Ts} where Ts
     if f == g
         b.zero
     else
@@ -298,105 +358,21 @@ function _binapply(::BDDXor, ::BinCache{Ts}, b::BDD{Ts}, f::BDDTerminal{Ts}, g::
     end
 end
 
-##
-
-# function fteval(b::BDD, f::AbstractBDDNode{Ts}, env::Dict{Ts,Tx})::Tx where {Ts,Tx}
-#     cache = Dict{UInt,Tx}()
-#     _fteval(b, f, env, cache)
-# end
-
-# function _fteval(b::BDD, f::Node{Ts}, env::Dict{Ts,Tx}, cache::Dict{UInt,Tx})::Tx where {Ts,Tx}
-#     get(cache, f.id) do
-#         p = env[f.header.label]
-#         fprob = (1-p) * _fteval(b, f.low, env, cache) + p * _fteval(b, f.high, env, cache)
-#         cache[f.id] = fprob
-#     end
-# end
-
-# function _fteval(b::BDD, f::Terminal{Ts}, env::Dict{Ts,Tx}, cache::Dict{UInt,Tx})::Tx where {Ts,Tx}
-#     (f == b.zero) ? Tx(0) : Tx(1)
-# end
-
-# ##
-
-# mutable struct MinPath
-#     len::Int
-#     set::Vector{Vector{Bool}}
-# end
-
-# function ftmcs(b::BDD, f::AbstractNode{Ts}) where Ts
-#     result = Vector{Ts}[]
-#     r = f
-#     while r != b.zero
-#         f, s = _ftmcs(b, r)
-#         append!(result, s)
-#         r = bddnot(b, bddimp(b, r, f))
-#     end
-#     result
-# end
-
-# function _ftmcs(b::BDD, f::AbstractNode{Ts}) where Ts
-#     vars = Dict([x.level => var!(b, x.label) for (k,x) = b.headers])
-#     path = [false for i = 1:Int(b.totalvarid)]
-#     s = MinPath(Int(b.totalvarid), Vector{Bool}[])
-#     _ftmcs(b, f, path, s)
-#     result = b.zero
-#     result2 = Vector{Ts}[]
-#     for x = s.set
-#         tmp = b.one
-#         tmp2 = Ts[]
-#         for i = 1:length(x)
-#             if x[i] == true
-#                 tmp = bddand(b, tmp, vars[i])
-#                 push!(tmp2, vars[i].header.label)
-#             end
-#         end
-#         result = bddor(b, result, tmp)
-#         push!(result2, tmp2)
-#     end
-#     return result, result2
-# end
-
-# function _ftmcs(b::BDD, f::Node{Ts}, path::Vector{Bool}, s::MinPath) where Ts
-#     if s.len < sum(path)
-#         return
-#     end
-#     path[f.header.level] = false
-#     _ftmcs(b, f.low, path, s)
-#     path[f.header.level] = true
-#     _ftmcs(b, f.high, path, s)
-#     path[f.header.level] = false
-#     nothing
-# end
-
-# function _ftmcs(b::BDD, f::Terminal{Ts}, path::Vector{Bool}, s::MinPath) where Ts
-#     if f == b.one
-#         if s.len > sum(path)
-#             s.len = sum(path)
-#             s.set = [copy(path)]
-#         elseif s.len == sum(path)
-#             push!(s.set, copy(path))
-#         end
-#     end
-#     nothing
-# end
-
 """
 todot(forest, f)
-
 Return a string for dot to draw a diagram.
 """
 
-function todot(b::BDD{Ts}, f::AbstractBDDNode{Ts}) where Ts
+function todot(b::BDDForest{Ts}, f::AbstractNode{Ts}) where Ts
     io = IOBuffer()
-    visited = Set{AbstractBDDNode{Ts}}()
+    visited = Set{AbstractNode{Ts}}()
     println(io, "digraph { layout=dot; overlap=false; splines=true; node [fontsize=10];")
     _todot!(b, f, visited, io)
     println(io, "}")
     return String(take!(io))
 end
 
-function _todot!(b::BDD{Ts}, f::BDDTerminal{Ts}, visited::Set{AbstractBDDNode{Ts}}, io::IO)::Nothing where Ts
+function _todot!(b::BDDForest{Ts}, f::Terminal{Ts}, visited::Set{AbstractNode{Ts}}, io::IO)::Nothing where Ts
     if in(f, visited)
         return
     end
@@ -409,7 +385,7 @@ function _todot!(b::BDD{Ts}, f::BDDTerminal{Ts}, visited::Set{AbstractBDDNode{Ts
     nothing
 end
 
-function _todot!(b::BDD{Ts}, f::BDDNode{Ts}, visited::Set{AbstractBDDNode{Ts}}, io::IO)::Nothing where Ts
+function _todot!(b::BDDForest{Ts}, f::Node{Ts}, visited::Set{AbstractNode{Ts}}, io::IO)::Nothing where Ts
     if in(f, visited)
         return
     end
@@ -422,3 +398,4 @@ function _todot!(b::BDD{Ts}, f::BDDNode{Ts}, visited::Set{AbstractBDDNode{Ts}}, 
     nothing
 end
 
+end

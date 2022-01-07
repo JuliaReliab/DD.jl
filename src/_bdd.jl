@@ -31,13 +31,13 @@ const NodeID = UInt
 struct
 """
 
-struct NodeHeader{Ts}
+mutable struct NodeHeader{Ts}
     id::HeaderID
     level::Int
     label::Ts
 end
 
-struct Node{Ts} <: AbstractNode{Ts}
+mutable struct Node{Ts} <: AbstractNode{Ts}
     id::NodeID
     header::NodeHeader{Ts}
     low::AbstractNode{Ts}

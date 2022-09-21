@@ -7,89 +7,96 @@ MSS
 mutable struct MSSVariable{Ts,Tx}
     label::Ts
     domain::Vector{Tx}
+    header::NodeHeader
+    f::AbstractNode
 end
 
 mutable struct MSS{Ts,Tx}
     vars::Dict{Ts,MSSVariable{Ts,Tx}}
-    values::Vector{Tx}
     dd::MDDForest
-    headers::Dict{Ts,NodeHeader}
-    terminals::Dict{Tx,Terminal}
-    trueterminal::Terminal
-    falseterminal::Terminal
 
-    function MSS(vars::Vector{MSSVariable{Ts,Tx}}, values::Vector{Tx}) where {Ts,Tx}
+    function MSS(::Type{Ts} = Symbol, ::Type{Tx} = ValueT) where {Ts,Tx}
         dd = MDDForest()
-        vv = Dict([x.label => x for x = vars]...)
-        headers = Dict([x.label => NodeHeader(i, length(x.domain)) for (i,x) = enumerate(vars)]...)
-        terminals = Dict([x => Terminal(dd, x) for x = values]...)
-        new{Ts,Tx}(vv, values, dd, headers, terminals, Terminal(dd, true), Terminal(dd, false))
+        vv = Dict{Ts,MSSVariable{Ts,Tx}}()
+        new{Ts,Tx}(vv, dd)
     end
 end
 
-function lte!(mss::MSS, x::Ts, v::Tx) where {Ts,Tx}
-    n = AbstractNode[]
-    domain = mss.vars[x].domain
-    for u = domain
-        if u <= v
-            push!(n, mss.trueterminal)
+function var!(mss::MSS{Ts,Tx}, name::Ts, domain::Vector{Tx}) where {Ts,Tx}
+    header = NodeHeader(length(mss.vars), length(domain))
+    f = Node(mss.dd, header, AbstractNode[Terminal(mss.dd, x) for x = domain])
+    mss.vars[name] = MSSVariable{Ts,Tx}(name, domain, header, f)
+    f
+end
+
+function val!(mss::MSS{Ts,Tx}, value::Tx) where {Ts,Tx}
+    val!(mss.dd, value)
+end
+
+## macro
+
+function _cond(mss, s::Any)
+    s
+end
+
+function _cond(mss, s::Symbol)
+    s
+end
+
+function _cond(mss, x::Expr)
+    if Meta.isexpr(x, :call)
+        if x.args[1] == :(==) && typeof(x.args[3]) <: Integer
+            Expr(:call, :eq!, mss, _cond(mss, x.args[2]), Expr(:call, :val!, mss, x.args[3]))
+        elseif x.args[1] == :(!=) && typeof(x.args[3]) <: Integer
+            Expr(:call, :neq!, mss, _cond(mss, x.args[2]), Expr(:call, :val!, mss, x.args[3]))
+        elseif x.args[1] == :(>=) && typeof(x.args[3]) <: Integer
+            Expr(:call, :gte!, mss, _cond(mss, x.args[2]), Expr(:call, :val!, mss, x.args[3]))
+        elseif x.args[1] == :(<=) && typeof(x.args[3]) <: Integer
+            Expr(:call, :lte!, mss, _cond(mss, x.args[2]), Expr(:call, :val!, mss, x.args[3]))
+        elseif x.args[1] == :(>) && typeof(x.args[3]) <: Integer
+            Expr(:call, :gt!, mss, _cond(mss, x.args[2]), Expr(:call, :val!, mss, x.args[3]))
+        elseif x.args[1] == :(<) && typeof(x.args[3]) <: Integer
+            Expr(:call, :lt!, mss, _cond(mss, x.args[2]), Expr(:call, :val!, mss, x.args[3]))
         else
-            push!(n, mss.falseterminal)
+            throw(ErrorException("Condition error: The expression should be like x >= 0"))
+        end
+    elseif Meta.isexpr(x, :(&&))
+        Expr(:call, :and!, mss, _cond(mss, x.args[1]), _cond(mss, x.args[2]))
+    elseif Meta.isexpr(x, :(||))
+        Expr(:call, :or!, mss, _cond(mss, x.args[1]), _cond(mss, x.args[2]))
+    else
+        throw(ErrorException("Condition expression error"))
+    end
+end
+
+function _branch(mss, v::Vector{Expr})
+    if length(v) > 1
+        x = v[1]
+        println(x)
+        if Meta.isexpr(x, :call)
+            if x.args[1] == :(=>) && typeof(x.args[3]) <: Integer
+                Expr(:call, :ifelse!, mss, _cond(mss, x.args[2]),
+                Expr(:call, :val!, mss, x.args[3]),
+                    _branch(mss, v[2:end]))
+            end
+        end
+    else
+        x = v[1]
+        if Meta.isexpr(x, :call) && x.args[1] == :(=>) && x.args[2] == :(_) && typeof(x.args[3]) <: Integer
+            Expr(:call, :val!, mss, x.args[3])
+        else
+            throw(ErrorException("The end of condition should be '_ => x'"))
         end
     end
-    Node(mss.dd, mss.headers[x], n)
 end
 
-function gte!(mss::MSS, x::Ts, v::Tx) where {Ts,Tx}
-    n = AbstractNode[]
-    domain = mss.vars[x].domain
-    for u = domain
-        if u >= v
-            push!(n, mss.trueterminal)
-        else
-            push!(n, mss.falseterminal)
-        end
+function _mss(mss, b::Expr)
+    if Meta.isexpr(b, :block)
+        match = [v for v = b.args if Meta.isexpr(v, :call) && v.args[1] == :(=>)]
     end
-    Node(mss.dd, mss.headers[x], n)
+    _branch(mss, match)
 end
 
-function eq!(mss::MSS, x::Ts, v::Tx) where {Ts,Tx}
-    n = AbstractNode[]
-    domain = mss.vars[x].domain
-    for u = domain
-        if u == v
-            push!(n, mss.trueterminal)
-        else
-            push!(n, mss.falseterminal)
-        end
-    end
-    Node(mss.dd, mss.headers[x], n)
-end
-
-function neq!(mss::MSS, x::Ts, v::Tx) where {Ts,Tx}
-    n = AbstractNode[]
-    domain = mss.vars[x].domain
-    for u = domain
-        if u != v
-            push!(n, mss.trueterminal)
-        else
-            push!(n, mss.falseterminal)
-        end
-    end
-    Node(mss.dd, mss.headers[x], n)
-end
-
-function and!(mss::MSS, f, g)
-    binapply!(mss.dd, mss.dd.andop, f, g)
-end
-
-function or!(mss::MSS, f, g)
-    binapply!(mss.dd, mss.dd.orop, f, g)
-end
-
-function ifelse!(mss::MSS, f, g, h)
-    tmp1 = binapply!(mss.dd, mss.dd.ifop, f, g)
-    tmp2 = binapply!(mss.dd, mss.dd.elseop, f, h)
-    tmp3 = binapply!(mss.dd, mss.dd.unionop, tmp1, tmp2)
-    tmp3
+macro mss(s, b)
+    esc(_mss(s, b))
 end

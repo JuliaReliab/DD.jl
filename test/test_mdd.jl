@@ -1,5 +1,5 @@
 import DD.MDD: MDDForest, NodeHeader, Terminal, Node, AbstractNode, todot, binapply!, MDDMin, MDDMax
-import DD.MDD: MSSVariable, MSS, gte!, lte!, eq!, neq!, ifelse!, and!, or!
+import DD.MDD: MSSVariable, MSS, var!, val!, gte!, lte!, eq!, neq!, ifelse!, and!, or!, @mss
 
 @testset "MDD1" begin
     b = MDDForest()
@@ -77,64 +77,118 @@ end
 end
 
 @testset "MSS1" begin
-    x1 = MSSVariable(:x1, [0,1])
-    x2 = MSSVariable(:x2, [0,1,2])
-    x3 = MSSVariable(:x3, [0,1,2])
-
-    mss = MSS([x1, x2, x3], [0,1,2,3])
-    # Node(mss.dd, mss.headers[:x1], mss.valuesAbstractNode[x1, x3])
+    mss = MSS()
+    x1 = var!(mss, :x1, [0,1])
+    x2 = var!(mss, :x2, [0,1,2])
+    x3 = var!(mss, :x3, [0,1,2])
 
     println(mss)
     println(mss.dd)
 end
 
 @testset "MSS2" begin
-    x1 = MSSVariable(:x1, [0,1])
-    x2 = MSSVariable(:x2, [0,1,2])
-    x3 = MSSVariable(:x3, [0,1,2])
+    mss = MSS()
+    x1 = var!(mss, :x1, [0,1])
+    x2 = var!(mss, :x2, [0,1,2])
+    x3 = var!(mss, :x3, [0,1,2])
 
-    mss = MSS([x1, x2, x3], [0,1,2,3])
-    x = gte!(mss, :x1, 0)
+    x = gte!(mss.dd, x2, val!(mss, 1))
     println(todot(mss.dd, x))
 end
 
 @testset "MSS3" begin
-    x1 = MSSVariable(:x1, [0,1])
-    x2 = MSSVariable(:x2, [0,1,2])
-    x3 = MSSVariable(:x3, [0,1,2])
+    mss = MSS()
+    x1 = var!(mss, :x1, [0,1])
+    x2 = var!(mss, :x2, [0,1,2])
+    x3 = var!(mss, :x3, [0,1,2])
 
-    mss = MSS([x1, x2, x3], [0,1,2,3])
-    x = gte!(mss, :x1, 1)
-    x = ifelse!(mss, x, mss.terminals[2], mss.terminals[3])
+    x = gte!(mss.dd, x1, val!(mss, 1))
+    x = ifelse!(mss.dd, x, val!(mss, 2), val!(mss, 3))
     println(todot(mss.dd, x))
 end
 
 @testset "MSS4" begin
-    x1 = MSSVariable(:x1, [0,1])
-    x2 = MSSVariable(:x2, [0,1,2])
-    x3 = MSSVariable(:x3, [0,1,2])
+    mss = MSS()
+    x1 = var!(mss, :x1, [0,1])
+    x2 = var!(mss, :x2, [0,1,2])
+    x3 = var!(mss, :x3, [0,1,2])
 
-    mss = MSS([x3, x2, x1], [0,1,2,3])
-    cond0 = or!(mss, eq!(mss, :x1, 0), and!(mss, eq!(mss, :x2, 0), eq!(mss, :x3, 0))) # x1 == 0 || (x2 == 0 && x3 == 0)
-    cond1 = and!(mss, eq!(mss, :x1, 1), or!(mss, eq!(mss, :x2, 0), eq!(mss, :x3, 0))) # x1 == 1 && (x2 == 0 || x3 == 0)
-    cond3 = and!(mss, eq!(mss, :x1, 1), or!(mss, eq!(mss, :x2, 2), eq!(mss, :x3, 2))) # x1 == 1 && (x2 == 2 || x3 == 2)
-    x = ifelse!(mss, cond0, mss.terminals[0], ifelse!(mss, cond1, mss.terminals[1], ifelse!(mss, cond3, mss.terminals[3], mss.terminals[2])))
-    println(todot(mss.dd, x))
+    b = mss.dd
+    cond0 = or!(b, eq!(b, x1, val!(b, 0)), and!(b, eq!(b, x2, val!(b, 0)), eq!(b, x3, val!(b, 0)))) # x1 == 0 || (x2 == 0 && x3 == 0)
+    cond1 = and!(b, eq!(b, x1, val!(b, 1)), or!(b, eq!(b, x2, val!(b, 0)), eq!(b, x3, val!(b, 0)))) # x1 == 1 && (x2 == 0 || x3 == 0)
+    cond3 = and!(b, eq!(b, x1, val!(b, 1)), or!(b, eq!(b, x2, val!(b, 2)), eq!(b, x3, val!(b, 2)))) # x1 == 1 && (x2 == 2 || x3 == 2)
+    x = ifelse!(b, cond0, val!(b, 0), ifelse!(b, cond1, val!(b, 1), ifelse!(b, cond3, val!(b, 3), val!(b, 2))))
+    println(todot(b, x))
 end
 
 @testset "MSS5" begin
-    x1 = MSSVariable(:x1, [0,1])
-    x2 = MSSVariable(:x2, [0,1,2])
-    x3 = MSSVariable(:x3, [0,1,2])
+    mss = MSS()
+    x1 = var!(mss, :x1, [0,1])
+    x2 = var!(mss, :x2, [0,1,2])
+    x3 = var!(mss, :x3, [0,1,2])
 
-    mss = MSS([x3, x2, x1], [0,1,2,3])
-    cond0 = and!(mss, eq!(mss, :x2, 0), eq!(mss, :x3, 0)) # x2 == 0 && x3 == 0
-    cond1 = or!(mss, eq!(mss, :x2, 0), eq!(mss, :x3, 0)) # x2 == 0 || x3 == 0
-    cond3 = or!(mss, eq!(mss, :x2, 2), eq!(mss, :x3, 2)) # x2 == 2 || x3 == 2
-    x = ifelse!(mss, eq!(mss, :x1, 0), mss.terminals[0],
-        ifelse!(mss, cond0, mss.terminals[0],
-        ifelse!(mss, cond1, mss.terminals[1],
-        ifelse!(mss, cond3, mss.terminals[3],
-        mss.terminals[2]))))
+    b = mss.dd
+    cond0 = and!(b, eq!(b, x2, val!(b, 0)), eq!(b, x3, val!(b, 0))) # x2 == 0 && x3 == 0
+    cond1 = or!(b, eq!(b, x2, val!(b, 0)), eq!(b, x3, val!(b, 0))) # x2 == 0 || x3 == 0
+    cond3 = or!(b, eq!(b, x2, val!(b, 2)), eq!(b, x3, val!(b, 2))) # x2 == 2 || x3 == 2
+    x = ifelse!(b, eq!(b, x1, val!(b, 0)), val!(b, 0),
+        ifelse!(b, cond0, val!(b, 0),
+        ifelse!(b, cond1, val!(b, 1),
+        ifelse!(b, cond3, val!(b, 3),
+        val!(b, 2)))))
+    println(todot(b, x))
+end
+
+@testset "MSS6" begin
+    mss = MSS()
+    x1 = var!(mss, :x1, [0,1])
+    x2 = var!(mss, :x2, [0,1,2])
+    x3 = var!(mss, :x3, [0,1,2])
+
+    x = @macroexpand @mss mss.dd begin
+        x1 == 0 => 0
+        x2 == 0 && x3 == 0 => 0
+        x2 == 0 || x3 == 0 => 1
+        x2 == 2 || x3 == 2 => 3
+        _ => 2
+    end
+    println(x)
+end
+
+@testset "MSS6" begin
+    mss = MSS()
+    x3 = var!(mss, :x3, [0,1,2])
+    x2 = var!(mss, :x2, [0,1,2])
+    x1 = var!(mss, :x1, [0,1])
+
+    x = @mss mss.dd begin
+        x1 == 0 => 0
+        x2 == 0 && x3 == 0 => 0
+        x2 == 0 || x3 == 0 => 1
+        x2 == 2 || x3 == 2 => 3
+        _ => 2
+    end
     println(todot(mss.dd, x))
+end
+
+@testset "MSS7" begin
+    mss = MSS()
+    x3 = var!(mss, :x3, [0,1,2])
+    x2 = var!(mss, :x2, [0,1,2])
+    x1 = var!(mss, :x1, [0,1])
+
+    x = @mss mss.dd begin
+        x1 == 0 => 0
+        x2 == 0 && x3 == 0 => 0
+        x2 == 0 || x3 == 0 => 1
+        x2 == 2 || x3 == 2 => 3
+        _ => 2
+    end
+
+    y = @mss mss.dd begin
+        x == 0 || x2 == 1 => 100
+        x2 == 2 => 200
+        _ => 1
+    end
+    println(todot(mss.dd, y))
 end

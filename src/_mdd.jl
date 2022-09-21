@@ -35,6 +35,14 @@ abstract type AbstractOperator end
 
 struct MDDMin <: AbstractOperator end
 struct MDDMax <: AbstractOperator end
+
+struct MDDLte <: AbstractOperator end
+struct MDDLt <: AbstractOperator end
+struct MDDGte <: AbstractOperator end
+struct MDDGt <: AbstractOperator end
+struct MDDEq <: AbstractOperator end
+struct MDDNeq <: AbstractOperator end
+
 struct MDDAnd <: AbstractOperator end
 struct MDDOr <: AbstractOperator end
 struct MDDIf <: AbstractOperator end
@@ -72,6 +80,12 @@ mutable struct MDDForest
     one::AbstractTerminal
     minop::BinOperator
     maxop::BinOperator
+    ltop::BinOperator
+    lteop::BinOperator
+    gtop::BinOperator
+    gteop::BinOperator
+    eqop::BinOperator
+    neqop::BinOperator
     andop::BinOperator
     orop::BinOperator
     ifop::BinOperator
@@ -86,13 +100,19 @@ mutable struct MDDForest
         one = Terminal{Bool}(_get_next!(mgr), true)
         minop = BinOperator(MDDMin(), Dict{Tuple{NodeID,NodeID},AbstractNode}())
         maxop = BinOperator(MDDMax(), Dict{Tuple{NodeID,NodeID},AbstractNode}())
+        ltop = BinOperator(MDDLt(), Dict{Tuple{NodeID,NodeID},AbstractNode}())
+        lteop = BinOperator(MDDLte(), Dict{Tuple{NodeID,NodeID},AbstractNode}())
+        gtop = BinOperator(MDDGt(), Dict{Tuple{NodeID,NodeID},AbstractNode}())
+        gteop = BinOperator(MDDGte(), Dict{Tuple{NodeID,NodeID},AbstractNode}())
+        eqop = BinOperator(MDDEq(), Dict{Tuple{NodeID,NodeID},AbstractNode}())
+        neqop = BinOperator(MDDNeq(), Dict{Tuple{NodeID,NodeID},AbstractNode}())
         andop = BinOperator(MDDAnd(), Dict{Tuple{NodeID,NodeID},AbstractNode}())
         orop = BinOperator(MDDOr(), Dict{Tuple{NodeID,NodeID},AbstractNode}())
         ifop = BinOperator(MDDIf(), Dict{Tuple{NodeID,NodeID},AbstractNode}())
         elseop = BinOperator(MDDElse(), Dict{Tuple{NodeID,NodeID},AbstractNode}())
         unionop = BinOperator(MDDUnion(), Dict{Tuple{NodeID,NodeID},AbstractNode}())
         new(mgr, ut, vt, zero, one,
-            minop, maxop, andop, orop, ifop, elseop, unionop)
+            minop, maxop, ltop, lteop, gtop, gteop, eqop, neqop, andop, orop, ifop, elseop, unionop)
     end
 end
 
@@ -158,6 +178,10 @@ function Terminal(b::MDDForest, value::Bool)
     end
 end
 
+function val!(b::MDDForest, value::ValueT)
+    Terminal(b, value)
+end
+
 """
 binapply
 
@@ -215,6 +239,66 @@ end
 function _binapply!(b::MDDForest, ::MDDMax, op::BinOperator, f::Terminal{ValueT}, g::Terminal{ValueT})
     tmp = max(f.value, g.value)
     Terminal(b, tmp)
+end
+
+## Lte
+
+function _binapply!(b::MDDForest, ::MDDLte, op::BinOperator, f::Terminal{ValueT}, g::Terminal{ValueT})
+    if f.value <= g.value
+        b.one
+    else
+        b.zero
+    end
+end
+
+## Lt
+
+function _binapply!(b::MDDForest, ::MDDLt, op::BinOperator, f::Terminal{ValueT}, g::Terminal{ValueT})
+    if f.value < g.value
+        b.one
+    else
+        b.zero
+    end
+end
+
+## Gte
+
+function _binapply!(b::MDDForest, ::MDDGte, op::BinOperator, f::Terminal{ValueT}, g::Terminal{ValueT})
+    if f.value >= g.value
+        b.one
+    else
+        b.zero
+    end
+end
+
+## Gt
+
+function _binapply!(b::MDDForest, ::MDDGt, op::BinOperator, f::Terminal{ValueT}, g::Terminal{ValueT})
+    if f.value > g.value
+        b.one
+    else
+        b.zero
+    end
+end
+
+## Eq
+
+function _binapply!(b::MDDForest, ::MDDEq, op::BinOperator, f::Terminal{ValueT}, g::Terminal{ValueT})
+    if f.value == g.value
+        b.one
+    else
+        b.zero
+    end
+end
+
+## Neq
+
+function _binapply!(b::MDDForest, ::MDDNeq, op::BinOperator, f::Terminal{ValueT}, g::Terminal{ValueT})
+    if f.value != g.value
+        b.one
+    else
+        b.zero
+    end
 end
 
 ## and
@@ -305,6 +389,46 @@ function _todot!(b::MDDForest, f::Node, visited::Set{AbstractNode}, io::IO)
     end
     push!(visited, f)
     nothing
+end
+
+### operations
+
+function lt!(b::MDDForest, f::AbstractNode, g::AbstractNode)
+    binapply!(b, b.ltop, f, g)
+end
+
+function lte!(b::MDDForest, f::AbstractNode, g::AbstractNode)
+    binapply!(b, b.lteop, f, g)
+end
+
+function gt!(b::MDDForest, f::AbstractNode, g::AbstractNode)
+    binapply!(b, b.gtop, f, g)
+end
+
+function gte!(b::MDDForest, f::AbstractNode, g::AbstractNode)
+    binapply!(b, b.gteop, f, g)
+end
+
+function eq!(b::MDDForest, f::AbstractNode, g::AbstractNode)
+    binapply!(b, b.eqop, f, g)
+end
+
+function neq!(b::MDDForest, f::AbstractNode, g::AbstractNode)
+    binapply!(b, b.neqop, f, g)
+end
+
+function and!(b::MDDForest, f::AbstractNode, g::AbstractNode)
+    binapply!(b, b.andop, f, g)
+end
+
+function or!(b::MDDForest, f::AbstractNode, g::AbstractNode)
+    binapply!(b, b.orop, f, g)
+end
+
+function ifelse!(b::MDDForest, f::AbstractNode, g::AbstractNode, h::AbstractNode)
+    tmp1 = binapply!(b, b.ifop, f, g)
+    tmp2 = binapply!(b, b.elseop, f, h)
+    binapply!(b, b.unionop, tmp1, tmp2)
 end
 
 include("_mss.jl")

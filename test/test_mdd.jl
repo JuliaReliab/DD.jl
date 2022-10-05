@@ -1,5 +1,5 @@
-import DD.MDD: MDDForest, NodeHeader, Terminal, Node, AbstractNode, todot, binapply!, MDDMin, MDDMax
-import DD.MDD: MSSVariable, MSS, var!, val!, gte!, lte!, eq!, neq!, ifelse!, and!, or!, @mss
+import DD.MDD: MDDForest, NodeHeader, Terminal, Node, AbstractNode, todot, apply!, MDDMin, MDDMax
+import DD.MDD: MSSVariable, MSS, var!, val!, gte!, lte!, eq!, neq!, ifelse!, and!, or!, max!, min!, @mss
 
 @testset "MDD1" begin
     b = MDDForest()
@@ -51,15 +51,15 @@ end
     n1 = Node(b, h3, AbstractNode[x1, x2])
     n2 = Node(b, h2, AbstractNode[x1, x2, x2])
     n3 = Node(b, h1, AbstractNode[x1, x2, x2])
-    tmp1 = binapply!(b, b.minop, n1, n2)
-    tmp2 = binapply!(b, b.minop, n1, n3)
-    v1 = binapply!(b, b.maxop, tmp1, tmp2)
+    tmp1 = apply!(b, MDDMin(), n1, n2)
+    tmp2 = apply!(b, MDDMin(), n1, n3)
+    v1 = apply!(b, MDDMax(), tmp1, tmp2)
     println(todot(b, v1))
 
     n1 = Node(b, h3, AbstractNode[x1, x3])
     n2 = Node(b, h2, AbstractNode[x1, x3, x3])
     n3 = Node(b, h1, AbstractNode[x1, x3, x3])
-    v2 = binapply!(b, b.minop, binapply!(b, b.minop, n1, n2), n3)
+    v2 = apply!(b, MDDMin(), apply!(b, MDDMin(), n1, n2), n3)
     println(todot(b, v2))
 
     n1 = Node(b, h3, AbstractNode[x1, x4])
@@ -67,12 +67,12 @@ end
     n22 = Node(b, h2, AbstractNode[x1, x4, x4])
     n31 = Node(b, h1, AbstractNode[x1, x1, x4])
     n32 = Node(b, h1, AbstractNode[x1, x4, x4])
-    tmp1 = binapply!(b, b.minop, binapply!(b, b.minop, n1, n21), n32)
-    tmp2 = binapply!(b, b.minop, binapply!(b, b.minop, n1, n22), n31)
-    v3 = binapply!(b, b.maxop, tmp1, tmp2)
+    tmp1 = apply!(b, MDDMin(), apply!(b, MDDMin(), n1, n21), n32)
+    tmp2 = apply!(b, MDDMin(), apply!(b, MDDMin(), n1, n22), n31)
+    v3 = apply!(b, MDDMax(), tmp1, tmp2)
     println(todot(b, v3))
 
-    v = binapply!(b, b.maxop, binapply!(b, b.maxop, v1, v2), v3)
+    v = apply!(b, MDDMax(), apply!(b, MDDMax(), v1, v2), v3)
     println(todot(b, v))
 end
 
@@ -191,4 +191,49 @@ end
         _ => 1
     end
     println(todot(mss.dd, y))
+end
+
+@testset "MSS8" begin
+    mss = MSS()
+    x1 = var!(mss, :x1, [0,1])
+    x2 = var!(mss, :x2, [0,1])
+    x3 = var!(mss, :x3, [0,1,2])
+
+    s1 = @mss mss.dd begin
+        x1 == 1 || x2 == 1 => 1
+        _ => 0
+    end
+
+    s2 = @mss mss.dd begin
+        x2 == 0 && x3 == 0 => 0
+        x2 == 0 => 1
+        x3 == 2 => 2
+        _ => 0
+    end
+
+    s3 = min!(mss.dd, s1, s2)
+    println(todot(mss.dd, s1))
+    println(todot(mss.dd, s2))
+    println(todot(mss.dd, s3))
+end
+
+@testset "MSS9" begin
+    mss = MSS()
+    C = var!(mss, :C, [0,1,2])
+    B = var!(mss, :B, [0,1,2])
+    A = var!(mss, :A, [0,1])
+
+    Sx = @mss mss.dd begin
+        B == 0 && C == 0 => 0
+        B == 0 || C == 0 => 1
+        B == 2 || C == 2 => 3
+        _ => 2
+    end
+
+    SS = @mss mss.dd begin
+        A == 0 => 0
+        _ => Sx
+    end
+
+    println(todot(mss.dd, SS))
 end

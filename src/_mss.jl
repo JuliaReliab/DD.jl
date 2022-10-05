@@ -43,47 +43,52 @@ function _cond(mss, s::Symbol)
     s
 end
 
+function _cond(mss, s::Integer)
+    Expr(:call, :val!, mss, s)
+end
+
 function _cond(mss, x::Expr)
     if Meta.isexpr(x, :call)
-        if x.args[1] == :(==) && typeof(x.args[3]) <: Integer
-            Expr(:call, :eq!, mss, _cond(mss, x.args[2]), Expr(:call, :val!, mss, x.args[3]))
-        elseif x.args[1] == :(!=) && typeof(x.args[3]) <: Integer
-            Expr(:call, :neq!, mss, _cond(mss, x.args[2]), Expr(:call, :val!, mss, x.args[3]))
-        elseif x.args[1] == :(>=) && typeof(x.args[3]) <: Integer
-            Expr(:call, :gte!, mss, _cond(mss, x.args[2]), Expr(:call, :val!, mss, x.args[3]))
-        elseif x.args[1] == :(<=) && typeof(x.args[3]) <: Integer
-            Expr(:call, :lte!, mss, _cond(mss, x.args[2]), Expr(:call, :val!, mss, x.args[3]))
-        elseif x.args[1] == :(>) && typeof(x.args[3]) <: Integer
-            Expr(:call, :gt!, mss, _cond(mss, x.args[2]), Expr(:call, :val!, mss, x.args[3]))
-        elseif x.args[1] == :(<) && typeof(x.args[3]) <: Integer
-            Expr(:call, :lt!, mss, _cond(mss, x.args[2]), Expr(:call, :val!, mss, x.args[3]))
+        if x.args[1] == :(==)
+            Expr(:call, :eq!, mss, _cond(mss, x.args[2]), _cond(mss, x.args[3]))
+        elseif x.args[1] == :(!=)
+            Expr(:call, :neq!, mss, _cond(mss, x.args[2]), _cond(mss, x.args[3]))
+        elseif x.args[1] == :(>=)
+            Expr(:call, :gte!, mss, _cond(mss, x.args[2]), _cond(mss, x.args[3]))
+        elseif x.args[1] == :(<=)
+            Expr(:call, :lte!, mss, _cond(mss, x.args[2]), _cond(mss, x.args[3]))
+        elseif x.args[1] == :(>)
+            Expr(:call, :gt!, mss, _cond(mss, x.args[2]), _cond(mss, x.args[3]))
+        elseif x.args[1] == :(<)
+            Expr(:call, :lt!, mss, _cond(mss, x.args[2]), _cond(mss, x.args[3]))
+        elseif x.args[1] == :max
+            Expr(:call, :max!, mss, [_cond(mss, u) for u = x.args[2:end]]...)
+        elseif x.args[1] == :min
+            Expr(:call, :min!, mss, [_cond(mss, u) for u = x.args[2:end]]...)
         else
-            throw(ErrorException("Condition error: The expression should be like x >= 0"))
+            throw(ErrorException("Function expression: Available functions are ==, !=, >=, <=, >, <, max, min"))
         end
     elseif Meta.isexpr(x, :(&&))
         Expr(:call, :and!, mss, _cond(mss, x.args[1]), _cond(mss, x.args[2]))
     elseif Meta.isexpr(x, :(||))
         Expr(:call, :or!, mss, _cond(mss, x.args[1]), _cond(mss, x.args[2]))
     else
-        throw(ErrorException("Condition expression error"))
+        throw(ErrorException("Expression error"))
     end
 end
 
 function _branch(mss, v::Vector{Expr})
     if length(v) > 1
         x = v[1]
-        println(x)
         if Meta.isexpr(x, :call)
-            if x.args[1] == :(=>) && typeof(x.args[3]) <: Integer
-                Expr(:call, :ifelse!, mss, _cond(mss, x.args[2]),
-                Expr(:call, :val!, mss, x.args[3]),
-                    _branch(mss, v[2:end]))
+            if x.args[1] == :(=>)
+                Expr(:call, :ifelse!, mss, _cond(mss, x.args[2]), _cond(mss, x.args[3]), _branch(mss, v[2:end]))
             end
         end
     else
         x = v[1]
-        if Meta.isexpr(x, :call) && x.args[1] == :(=>) && x.args[2] == :(_) && typeof(x.args[3]) <: Integer
-            Expr(:call, :val!, mss, x.args[3])
+        if Meta.isexpr(x, :call) && x.args[1] == :(=>) && x.args[2] == :(_)
+            _cond(mss, x.args[3])
         else
             throw(ErrorException("The end of condition should be '_ => x'"))
         end

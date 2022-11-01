@@ -22,29 +22,58 @@ mutable struct MSS{Ts,Tx}
     end
 end
 
-function var!(mss::MSS{Ts,Tx}, name::Ts, domain::Vector{Tx}) where {Ts,Tx}
-    header = NodeHeader(length(mss.vars), length(domain))
+function var!(mss::MSS{Ts,Tx}, name::Ts, domain::AbstractVector{Tx}) where {Ts,Tx}
+    header = NodeHeader(length(mss.vars), name, [Symbol(i) for i = domain])
     f = Node(mss.dd, header, AbstractNode[Terminal(mss.dd, x) for x = domain])
     mss.vars[name] = MSSVariable{Ts,Tx}(name, domain, header, f)
     f
 end
 
 function val!(mss::MSS{Ts,Tx}, value::Tx) where {Ts,Tx}
-    val!(mss.dd, value)
+    Terminal(mss.dd, value)
 end
 
 ## macro
+
+"""
+Example
+
+## definition of function
+@gate G1(a, b) begin
+  if a == 0 || b == 0
+    0
+  else
+    b
+  end
+end
+
+@gate G2(a, b) begin
+  match(
+      a == 0 && b == 0 => 0,
+      a == 0 || b == 0 => 1,
+      a == 2 || b == 2 => 3,
+      _ => 2
+  )
+end
+
+Sx = G2(dd, B, C)
+SS = G1(dd, A, Sx)
+"""
 
 function _cond(mss, s::Any)
     s
 end
 
 function _cond(mss, s::Symbol)
-    s
+    if s == :None
+        Expr(:call, :Terminal, mss, Expr(:quote, s))
+    else
+        s
+    end
 end
 
 function _cond(mss, s::Integer)
-    Expr(:call, :val!, mss, s)
+    Expr(:call, :Terminal, mss, s)
 end
 
 function _cond(mss, x::Expr)
@@ -65,15 +94,21 @@ function _cond(mss, x::Expr)
             Expr(:call, :max!, mss, [_cond(mss, u) for u = x.args[2:end]]...)
         elseif x.args[1] == :min
             Expr(:call, :min!, mss, [_cond(mss, u) for u = x.args[2:end]]...)
+        elseif x.args[1] == :(+)
+            Expr(:call, :plus!, mss, [_cond(mss, u) for u = x.args[2:end]]...)
+        elseif x.args[1] == :(-)
+            Expr(:call, :minus!, mss, [_cond(mss, u) for u = x.args[2:end]]...)
+        elseif x.args[1] == :(*)
+            Expr(:call, :mul!, mss, [_cond(mss, u) for u = x.args[2:end]]...)
         else
-            throw(ErrorException("Function expression: Available functions are ==, !=, >=, <=, >, <, max, min"))
+            throw(ErrorException("Function expression: Available functions are ==, !=, >=, <=, >, <, max, min, +, -, *"))
         end
     elseif Meta.isexpr(x, :(&&))
         Expr(:call, :and!, mss, _cond(mss, x.args[1]), _cond(mss, x.args[2]))
     elseif Meta.isexpr(x, :(||))
         Expr(:call, :or!, mss, _cond(mss, x.args[1]), _cond(mss, x.args[2]))
     else
-        throw(ErrorException("Expression error"))
+        x
     end
 end
 
@@ -102,6 +137,13 @@ function _mss(mss, b::Expr)
     _branch(mss, match)
 end
 
+function _match(mss, b::Expr)
+    if Meta.isexpr(b, :block)
+        match = [v for v = b.args if Meta.isexpr(v, :call) && v.args[1] == :(=>)]
+    end
+    _branch(mss, match)
+end
+    
 macro mss(s, b)
     esc(_mss(s, b))
 end

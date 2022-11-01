@@ -1,5 +1,6 @@
 import DD.MDD: MDDForest, NodeHeader, Terminal, Node, AbstractNode, todot, apply!, MDDMin, MDDMax
-import DD.MDD: MSSVariable, MSS, var!, val!, gte!, lte!, eq!, neq!, ifelse!, and!, or!, max!, min!, @mss
+import DD.MDD: MSSVariable, MSS, var!, val!, gte!, lt!, gt!, lte!, eq!, neq!, ifelse!, and!, or!, max!, min!, plus!, minus!, mul!, prob, @mss, ValueT
+import DD.MDD: MDDIf, MDDElse
 
 @testset "MDD1" begin
     b = MDDForest()
@@ -78,9 +79,9 @@ end
 
 @testset "MSS1" begin
     mss = MSS()
-    x1 = var!(mss, :x1, [0,1])
-    x2 = var!(mss, :x2, [0,1,2])
-    x3 = var!(mss, :x3, [0,1,2])
+    x1 = var!(mss, :x1, ValueT[0,1])
+    x2 = var!(mss, :x2, ValueT[0,1,2])
+    x3 = var!(mss, :x3, ValueT[0,1,2])
 
     println(mss)
     println(mss.dd)
@@ -88,9 +89,9 @@ end
 
 @testset "MSS2" begin
     mss = MSS()
-    x1 = var!(mss, :x1, [0,1])
-    x2 = var!(mss, :x2, [0,1,2])
-    x3 = var!(mss, :x3, [0,1,2])
+    x1 = var!(mss, :x1, ValueT[0,1])
+    x2 = var!(mss, :x2, ValueT[0,1,2])
+    x3 = var!(mss, :x3, ValueT[0,1,2])
 
     x = gte!(mss.dd, x2, val!(mss, 1))
     println(todot(mss.dd, x))
@@ -98,9 +99,9 @@ end
 
 @testset "MSS3" begin
     mss = MSS()
-    x1 = var!(mss, :x1, [0,1])
-    x2 = var!(mss, :x2, [0,1,2])
-    x3 = var!(mss, :x3, [0,1,2])
+    x1 = var!(mss, :x1, ValueT[0,1])
+    x2 = var!(mss, :x2, ValueT[0,1,2])
+    x3 = var!(mss, :x3, ValueT[0,1,2])
 
     x = gte!(mss.dd, x1, val!(mss, 1))
     x = ifelse!(mss.dd, x, val!(mss, 2), val!(mss, 3))
@@ -109,41 +110,41 @@ end
 
 @testset "MSS4" begin
     mss = MSS()
-    x1 = var!(mss, :x1, [0,1])
-    x2 = var!(mss, :x2, [0,1,2])
-    x3 = var!(mss, :x3, [0,1,2])
+    x1 = var!(mss, :x1, ValueT[0,1])
+    x2 = var!(mss, :x2, ValueT[0,1,2])
+    x3 = var!(mss, :x3, ValueT[0,1,2])
 
     b = mss.dd
-    cond0 = or!(b, eq!(b, x1, val!(b, 0)), and!(b, eq!(b, x2, val!(b, 0)), eq!(b, x3, val!(b, 0)))) # x1 == 0 || (x2 == 0 && x3 == 0)
-    cond1 = and!(b, eq!(b, x1, val!(b, 1)), or!(b, eq!(b, x2, val!(b, 0)), eq!(b, x3, val!(b, 0)))) # x1 == 1 && (x2 == 0 || x3 == 0)
-    cond3 = and!(b, eq!(b, x1, val!(b, 1)), or!(b, eq!(b, x2, val!(b, 2)), eq!(b, x3, val!(b, 2)))) # x1 == 1 && (x2 == 2 || x3 == 2)
-    x = ifelse!(b, cond0, val!(b, 0), ifelse!(b, cond1, val!(b, 1), ifelse!(b, cond3, val!(b, 3), val!(b, 2))))
+    cond0 = or!(b, eq!(b, x1, Terminal(b, 0)), and!(b, eq!(b, x2, Terminal(b, 0)), eq!(b, x3, Terminal(b, 0)))) # x1 == 0 || (x2 == 0 && x3 == 0)
+    cond1 = and!(b, eq!(b, x1, Terminal(b, 1)), or!(b, eq!(b, x2, Terminal(b, 0)), eq!(b, x3, Terminal(b, 0)))) # x1 == 1 && (x2 == 0 || x3 == 0)
+    cond3 = and!(b, eq!(b, x1, Terminal(b, 1)), or!(b, eq!(b, x2, Terminal(b, 2)), eq!(b, x3, Terminal(b, 2)))) # x1 == 1 && (x2 == 2 || x3 == 2)
+    x = ifelse!(b, cond0, Terminal(b, 0), ifelse!(b, cond1, Terminal(b, 1), ifelse!(b, cond3, Terminal(b, 3), Terminal(b, 2))))
     println(todot(b, x))
 end
 
 @testset "MSS5" begin
     mss = MSS()
-    x1 = var!(mss, :x1, [0,1])
-    x2 = var!(mss, :x2, [0,1,2])
-    x3 = var!(mss, :x3, [0,1,2])
+    x1 = var!(mss, :x1, ValueT[0,1])
+    x2 = var!(mss, :x2, ValueT[0,1,2])
+    x3 = var!(mss, :x3, ValueT[0,1,2])
 
     b = mss.dd
-    cond0 = and!(b, eq!(b, x2, val!(b, 0)), eq!(b, x3, val!(b, 0))) # x2 == 0 && x3 == 0
-    cond1 = or!(b, eq!(b, x2, val!(b, 0)), eq!(b, x3, val!(b, 0))) # x2 == 0 || x3 == 0
-    cond3 = or!(b, eq!(b, x2, val!(b, 2)), eq!(b, x3, val!(b, 2))) # x2 == 2 || x3 == 2
-    x = ifelse!(b, eq!(b, x1, val!(b, 0)), val!(b, 0),
-        ifelse!(b, cond0, val!(b, 0),
-        ifelse!(b, cond1, val!(b, 1),
-        ifelse!(b, cond3, val!(b, 3),
-        val!(b, 2)))))
+    cond0 = and!(b, eq!(b, x2, Terminal(b, 0)), eq!(b, x3, Terminal(b, 0))) # x2 == 0 && x3 == 0
+    cond1 = or!(b, eq!(b, x2, Terminal(b, 0)), eq!(b, x3, Terminal(b, 0))) # x2 == 0 || x3 == 0
+    cond3 = or!(b, eq!(b, x2, Terminal(b, 2)), eq!(b, x3, Terminal(b, 2))) # x2 == 2 || x3 == 2
+    x = ifelse!(b, eq!(b, x1, Terminal(b, 0)), Terminal(b, 0),
+        ifelse!(b, cond0, Terminal(b, 0),
+        ifelse!(b, cond1, Terminal(b, 1),
+        ifelse!(b, cond3, Terminal(b, 3),
+        Terminal(b, 2)))))
     println(todot(b, x))
 end
 
 @testset "MSS6" begin
     mss = MSS()
-    x1 = var!(mss, :x1, [0,1])
-    x2 = var!(mss, :x2, [0,1,2])
-    x3 = var!(mss, :x3, [0,1,2])
+    x1 = var!(mss, :x1, ValueT[0,1])
+    x2 = var!(mss, :x2, ValueT[0,1,2])
+    x3 = var!(mss, :x3, ValueT[0,1,2])
 
     x = @macroexpand @mss mss.dd begin
         x1 == 0 => 0
@@ -157,9 +158,9 @@ end
 
 @testset "MSS6" begin
     mss = MSS()
-    x3 = var!(mss, :x3, [0,1,2])
-    x2 = var!(mss, :x2, [0,1,2])
-    x1 = var!(mss, :x1, [0,1])
+    x3 = var!(mss, :x3, ValueT[0,1,2])
+    x2 = var!(mss, :x2, ValueT[0,1,2])
+    x1 = var!(mss, :x1, ValueT[0,1])
 
     x = @mss mss.dd begin
         x1 == 0 => 0
@@ -173,9 +174,9 @@ end
 
 @testset "MSS7" begin
     mss = MSS()
-    x3 = var!(mss, :x3, [0,1,2])
-    x2 = var!(mss, :x2, [0,1,2])
-    x1 = var!(mss, :x1, [0,1])
+    x3 = var!(mss, :x3, ValueT[0,1,2])
+    x2 = var!(mss, :x2, ValueT[0,1,2])
+    x1 = var!(mss, :x1, ValueT[0,1])
 
     x = @mss mss.dd begin
         x1 == 0 => 0
@@ -195,9 +196,9 @@ end
 
 @testset "MSS8" begin
     mss = MSS()
-    x1 = var!(mss, :x1, [0,1])
-    x2 = var!(mss, :x2, [0,1])
-    x3 = var!(mss, :x3, [0,1,2])
+    x1 = var!(mss, :x1, ValueT[0,1])
+    x2 = var!(mss, :x2, ValueT[0,1])
+    x3 = var!(mss, :x3, ValueT[0,1,2])
 
     s1 = @mss mss.dd begin
         x1 == 1 || x2 == 1 => 1
@@ -219,9 +220,9 @@ end
 
 @testset "MSS9" begin
     mss = MSS()
-    C = var!(mss, :C, [0,1,2])
-    B = var!(mss, :B, [0,1,2])
-    A = var!(mss, :A, [0,1])
+    C = var!(mss, :C, ValueT[0,1,2])
+    B = var!(mss, :B, ValueT[0,1,2])
+    A = var!(mss, :A, ValueT[0,1])
 
     Sx = @mss mss.dd begin
         B == 0 && C == 0 => 0
@@ -237,3 +238,161 @@ end
 
     println(todot(mss.dd, SS))
 end
+
+@testset "MSS10" begin
+    mss = MSS()
+    C = var!(mss, :C, ValueT[0,1,2])
+    B = var!(mss, :B, ValueT[0,1,2])
+    A = var!(mss, :A, ValueT[0,1])
+
+    p = Dict([
+        A.header=>[0.2, 0.8],
+        B.header=>[0.2, 0.2, 0.6],
+        C.header=>[0.1, 0.3, 0.6]
+    ])
+
+    Sx = @mss mss.dd begin
+        B == 0 && C == 0 => 0
+        B == 0 || C == 0 => 1
+        B == 2 || C == 2 => 3
+        _ => 2
+    end
+
+    SS = @mss mss.dd begin
+        A == 0 => 0
+        _ => Sx
+    end
+
+    println([prob(mss.dd, SS, p, v) for v = [0,1,2,3]])
+end
+
+@testset "MSS11" begin
+    mss = MSS()
+    x3 = var!(mss, :x3, 0:10)
+    x2 = var!(mss, :x2, 0:10)
+    x1 = var!(mss, :x1, 0:10)
+    t1 = var!(mss, :t1, 0:1)
+    t1dash = var!(mss, :t1, 0:1)
+
+    x1dash = @mss mss.dd begin
+        t1 == 1 && x1 >= 1 && x2 >= 1 && x3 < 10 => x1 - 1
+        _ => x1
+    end
+
+    x2dash = @mss mss.dd begin
+        t1 == 1 && x1 >= 1 && x2 >= 1 && x3 < 10 => x2 - 1
+        _ => x2
+    end
+
+    x3dash = @mss mss.dd begin
+        t1 == 1 && x1 >= 1 && x2 >= 1 && x3 < 10 => x3 + 1
+        _ => x3
+    end
+
+    x1dashdash = @mss mss.dd begin
+        t1dash == 2 && x1dash >= 1 && x2dash >= 1 && x3dash < 10 => x1dash - 1
+        _ => x1dash
+    end
+
+    println(todot(mss.dd, x1dashdash))
+    # println(todot(mss.dd, x2dash))
+    # println(todot(mss.dd, x3dash))
+end
+
+@testset "MSS12" begin
+    mss = MSS()
+    n = 5
+    x = [var!(mss, Symbol(:x, i), 0:n) for i = 1:6]
+    t = var!(mss, :t, 1:6)
+
+    s = @mss mss.dd begin
+        x[2] - x[3] + x[4] - x[5] == 0 => 1
+        _ => None
+    end
+
+    x1dash = @mss mss.dd begin
+        s == 1 && t == 1 && x[1] < 5 => x[1] + 1
+        s == 1 && t == 2 && x[1] > 1 && x[2] < 5 && x[3] < 5 => x[1] - 1
+        s == 1 => x[1]
+        _ => None
+    end
+
+    println(todot(mss.dd, x1dash))
+end
+
+# @testset "MSS12" begin
+#     n = 5
+#     mss = MSS()
+#     x = [var!(mss, Symbol(:x, i), 0:n) for i = 1:6]
+#     t = var!(mss, :t, 1:6)
+
+#     s = @mss mss.dd begin
+#         x[2] - x[3] + x[4] - x[5] == 0 => 1
+#         _ => 0
+#     end
+
+#     x1dash = @mss mss.dd begin
+#         s == 1 && t == 1 && x[1] < 5 => x[1] + 1
+#         s == 1 && t == 2 && x[1] > 1 && x[2] < 5 && x[3] < 5 => x[1] - 1
+#         s == 1 => x[1]
+#         _ => None
+#     end
+
+#     println(todot(mss.dd, x1dash))
+
+#     x2dash = @mss mss.dd begin
+#         s == 1 && t == 2 && x[1] > 1 && x[2] < 5 && x[3] < 5 => x[2] + 1
+#         s == 1 && t == 3 && x[2] > 1 && x[4] < 5 => x[2] - 1
+#         s == 1 => x[2]
+#         _ => None
+#     end
+
+#     println(todot(mss.dd, x2dash))
+
+#     x3dash = @mss mss.dd begin
+#         s == 1 && t == 2 && x[1] > 1 && x[2] < 5 && x[3] < 5 => x[3] + 1
+#         s == 1 && t == 4 && x[3] > 1 && x[5] < 5 => x[3] - 1
+#         s == 1 => x[3]
+#         _ => None
+#     end
+
+#     println(todot(mss.dd, x3dash))
+
+#     x4dash = @mss mss.dd begin
+#         s == 1 && t == 3 && x[2] > 1 && x[4] < 5 => x[4] + 1
+#         s == 1 && t == 5 && x[4] > 1 && x[5] > 1 && x[6] < 5 => x[4] - 1
+#         s == 1 => x[4]
+#         _ => None
+#     end
+
+#     println(todot(mss.dd, x4dash))
+
+#     x5dash = @mss mss.dd begin
+#         s == 1 && t == 4 && x[3] > 1 && x[5] < 5 => x[5] + 1
+#         s == 1 && t == 5 && x[4] > 1 && x[5] > 1 && x[6] < 5 => x[5] - 1
+#         s == 1 => x[5]
+#         _ => None
+#     end
+
+#     println(todot(mss.dd, x5dash))
+
+#     x6dash = @mss mss.dd begin
+#         s == 1 && t == 5 && x[4] > 1 && x[5] > 1 && x[6] < 5 => x[6] + 1
+#         s == 1 && t == 6 && x[6] > 1 => x[6] - 1
+#         s == 1 => x[6]
+#         _ => None
+#     end
+
+#     println(todot(mss.dd, x6dash))
+
+#     xdash = [x1dash, x2dash, x3dash, x4dash, x5dash, x6dash]
+#     t1 = var!(mss, :t1, 1:6)
+
+#     x1dash = @mss mss.dd begin
+#         t1 == 1 && xdash[1] < 5 => xdash[1] + 1
+#         t1 == 2 && xdash[1] > 1 && xdash[2] < 5 && xdash[3] < 5 => xdash[1] - 1
+#         _ => xdash[1]
+#     end    
+
+#     println(todot(mss.dd, x1dash))
+# end

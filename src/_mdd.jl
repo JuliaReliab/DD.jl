@@ -25,6 +25,8 @@ end
 type alias
 """
 
+struct Undetermined end
+
 const HeaderID = UInt
 const NodeID = UInt
 const LevelT = Int
@@ -35,12 +37,18 @@ abstract type AbstractOperator end
 
 struct MDDMin <: AbstractOperator end
 struct MDDMax <: AbstractOperator end
+
+struct MDDPlus <: AbstractOperator end
+struct MDDMinus <: AbstractOperator end
+struct MDDMul <: AbstractOperator end
+
 struct MDDLte <: AbstractOperator end
 struct MDDLt <: AbstractOperator end
 struct MDDGte <: AbstractOperator end
 struct MDDGt <: AbstractOperator end
 struct MDDEq <: AbstractOperator end
 struct MDDNeq <: AbstractOperator end
+
 struct MDDAnd <: AbstractOperator end
 struct MDDOr <: AbstractOperator end
 struct MDDNot <: AbstractOperator end
@@ -73,6 +81,7 @@ mutable struct MDDForest
     vtable::Dict{ValueT,AbstractNode}
     zero::AbstractTerminal
     one::AbstractTerminal
+    undetermined::AbstractTerminal
     cache::Dict{Tuple{AbstractOperator,NodeID,NodeID},AbstractNode}
 
     function MDDForest()
@@ -81,8 +90,9 @@ mutable struct MDDForest
         vt = Dict{ValueT,AbstractNode}()
         zero = Terminal{Bool}(_get_next!(mgr), false)
         one = Terminal{Bool}(_get_next!(mgr), true)
+        undetermined = Terminal{Undetermined}(_get_next!(mgr), Undetermined())
         cache = Dict{Tuple{AbstractOperator,NodeID,NodeID},AbstractNode}()
-        new(mgr, ut, vt, zero, one, cache)
+        new(mgr, ut, vt, zero, one, undetermined, cache)
     end
 end
 
@@ -94,9 +104,15 @@ mutable struct NodeHeader
     id::HeaderID
     level::LevelT
     domain::DomainT
+    label::Symbol
+    domainLabels::Vector{Symbol}
 
     function NodeHeader(level::LevelT, domain::DomainT)
-        new(level, level, domain)
+        new(level, level, domain, Symbol(level), [Symbol(i) for i = 1:domain])
+    end
+
+    function NodeHeader(level::LevelT, label::Symbol, domain::Vector{Symbol})
+        new(level, level, length(domain), label, domain)
     end
 end
 
@@ -148,8 +164,14 @@ function Terminal(b::MDDForest, value::Bool)
     end
 end
 
-function val!(b::MDDForest, value::ValueT)
-    Terminal(b, value)
+function Terminal(b::MDDForest, value::Symbol)
+    if value == :None
+        b.undetermined
+    elseif value == :Union
+        b.union
+    else
+        throw(ErrorException("Specaial Symbols are None or Union."))
+    end
 end
 
 """
@@ -220,6 +242,41 @@ function _apply!(b::MDDForest, op::AbstractOperator, f::Node, g::AbstractTermina
     end
 end
 
+# function _apply!(b::MDDForest, op::AbstractOperator, f::Terminal{Undetermined}, g::Node)
+#     f
+# end
+
+# function _apply!(b::MDDForest, op::AbstractOperator, f::Node, g::Terminal{Undetermined})
+#     g
+# end
+
+for op = [:MDDMin, :MDDMax, :MDDPlus, :MDDMinus, :MDDMul, :MDDLte, :MDDLt, :MDDGte, :MDDGt, :MDDEq, :MDDNeq]
+    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{ValueT}, ::Terminal{Undetermined})
+        b.undetermined
+    end
+    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Undetermined}, ::Terminal{ValueT})
+        b.undetermined
+    end
+    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Undetermined}, ::Terminal{Undetermined})
+        b.undetermined
+    end
+end
+
+for op = [:MDDAnd, :MDDOr]
+    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Bool}, ::Terminal{Undetermined})
+        b.undetermined
+    end
+    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Undetermined}, ::Terminal{Bool})
+        b.undetermined
+    end
+    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Bool}, ::Terminal{Undetermined})
+        b.undetermined
+    end
+    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Undetermined}, ::Terminal{Undetermined})
+        b.undetermined
+    end
+end
+
 ## min
 
 function _apply!(b::MDDForest, ::MDDMin, f::Terminal{ValueT}, g::Terminal{ValueT})
@@ -230,6 +287,24 @@ end
 
 function _apply!(b::MDDForest, ::MDDMax, f::Terminal{ValueT}, g::Terminal{ValueT})
     Terminal(b, max(f.value, g.value))
+end
+
+## Plus
+
+function _apply!(b::MDDForest, ::MDDPlus, f::Terminal{ValueT}, g::Terminal{ValueT})
+    Terminal(b, f.value + g.value)
+end
+
+## Minus
+
+function _apply!(b::MDDForest, ::MDDMinus, f::Terminal{ValueT}, g::Terminal{ValueT})
+    Terminal(b, f.value - g.value)
+end
+
+## Mul
+
+function _apply!(b::MDDForest, ::MDDMul, f::Terminal{ValueT}, g::Terminal{ValueT})
+    Terminal(b, f.value * g.value)
 end
 
 ## Lte
@@ -270,23 +345,23 @@ end
 
 ## and
 
-function _apply!(b::MDDForest, ::MDDAnd, f::Terminal{Bool}, g::Node)
-    # assume f.value, g.value are bool
-    if f.value == true
-        g
-    else
-        b.zero
-    end
-end
+# function _apply!(b::MDDForest, ::MDDAnd, f::Terminal{Bool}, g::Node)
+#     # assume f.value, g.value are bool
+#     if f.value == true
+#         g
+#     else
+#         b.zero
+#     end
+# end
 
-function _apply!(b::MDDForest, ::MDDAnd, f::Node, g::Terminal{Bool})
-    # assume f.value, g.value are bool
-    if g.value == true
-        f
-    else
-        b.zero
-    end
-end
+# function _apply!(b::MDDForest, ::MDDAnd, f::Node, g::Terminal{Bool})
+#     # assume f.value, g.value are bool
+#     if g.value == true
+#         f
+#     else
+#         b.zero
+#     end
+# end
 
 function _apply!(b::MDDForest, ::MDDAnd, f::Terminal{Bool}, g::Terminal{Bool})
     # assume f.value, g.value are bool
@@ -295,67 +370,75 @@ end
 
 ## or
 
-function _apply!(b::MDDForest, ::MDDOr, f::Terminal{Bool}, g::Node)
-    # assume f.value, g.value are bool
-    if f.value == false
-        g
-    else
-        b.one
-    end
-end
+# function _apply!(b::MDDForest, ::MDDOr, f::Terminal{Bool}, g::Node)
+#     # assume f.value, g.value are bool
+#     if f.value == false
+#         g
+#     else
+#         b.one
+#     end
+# end
 
-function _apply!(b::MDDForest, ::MDDOr, f::Node, g::Terminal{Bool})
-    # assume f.value, g.value are bool
-    if g.value == false
-        f
-    else
-        b.one
-    end
-end
+# function _apply!(b::MDDForest, ::MDDOr, f::Node, g::Terminal{Bool})
+#     # assume f.value, g.value are bool
+#     if g.value == false
+#         f
+#     else
+#         b.one
+#     end
+# end
 
 function _apply!(b::MDDForest, ::MDDOr, f::Terminal{Bool}, g::Terminal{Bool})
     # assume f.value, g.value are bool
     Terminal(b, f.value || g.value)
 end
 
-## if
+####### if
 
-function _apply!(b::MDDForest, ::MDDIf, f::Terminal{Bool}, g::Terminal{ValueT})
+function _apply!(b::MDDForest, ::MDDIf, f::Terminal{Bool}, g::Terminal{Tx}) where Tx <: Union{ValueT, Bool, Undetermined}
     # assume f.value is bool, g.value is integer
     if f.value == true
         g
     else
-        f
+        b.undetermined
     end
+end
+
+function _apply!(b::MDDForest, ::MDDIf, f::Terminal{Undetermined}, g::AbstractTerminal)
+    b.undetermined
 end
 
 ## else
 
-function _apply!(b::MDDForest, ::MDDElse, f::Terminal{Bool}, g::Terminal{ValueT})
+function _apply!(b::MDDForest, ::MDDElse, f::Terminal{Bool}, g::Terminal{Tx}) where Tx <: Union{ValueT, Bool, Undetermined}
     # assume f.value is bool, g.value is integer
     if f.value == false
         g
     else
-        f
+        b.undetermined
     end
+end
+
+function _apply!(b::MDDForest, ::MDDElse, f::Terminal{Undetermined}, g::AbstractTerminal)
+    b.undetermined
 end
 
 ## Union
 
-function _apply!(b::MDDForest, ::MDDUnion, f::Terminal{Bool}, g::Terminal{ValueT})
+function _apply!(b::MDDForest, ::MDDUnion, f::Terminal{Undetermined}, g::Terminal{Tx}) where Tx <: Union{ValueT, Bool}
     g
 end
 
-function _apply!(b::MDDForest, ::MDDUnion, f::Terminal{ValueT}, g::Terminal{Bool})
+function _apply!(b::MDDForest, ::MDDUnion, f::Terminal{Tx}, g::Terminal{Undetermined}) where Tx <: Union{ValueT, Bool}
     f
 end
 
-function _apply!(b::MDDForest, ::MDDUnion, f::Terminal{ValueT}, g::Terminal{ValueT})
+function _apply!(b::MDDForest, ::MDDUnion, f::Terminal{Tx}, g::Terminal{Ty}) where {Tx <: Union{ValueT, Bool}, Ty <: Union{ValueT, Bool}}
     throw(ErrorException("There exists a conflict condition."))
 end
 
-function _apply!(b::MDDForest, ::MDDUnion, f::Terminal{Bool}, g::Terminal{Bool})
-    throw(ErrorException("There exists a undermined condition."))
+function _apply!(b::MDDForest, ::MDDUnion, f::Terminal{Undetermined}, g::Terminal{Undetermined})
+    b.undetermined
 end
 
 """
@@ -385,19 +468,46 @@ function _todot!(b::MDDForest, f::Node, visited::Set{AbstractNode}, io::IO)
     if in(f, visited)
         return
     end
-    println(io, "\"obj$(f.id)\" [shape = circle, label = \"$(f.header.level)\"];")
-    for i = 1:f.header.domain
-        _todot!(b, f.nodes[i], visited, io)
-        println(io, "\"obj$(f.id)\" -> \"obj$(f.nodes[i].id)\" [label = \"$(i)\"];")
+    println(io, "\"obj$(f.id)\" [shape = circle, label = \"$(f.header.label)\"];")
+    for (i,x) = enumerate(f.header.domainLabels)
+        if f.nodes[i] != b.undetermined
+            _todot!(b, f.nodes[i], visited, io)
+            println(io, "\"obj$(f.id)\" -> \"obj$(f.nodes[i].id)\" [label = \"$(x)\"];")
+        end
     end
     push!(visited, f)
     nothing
 end
 
+"""
+prob(forest, f)
+"""
+
+function prob(b::MDDForest, f::AbstractNode, pr::Dict{NodeHeader,Vector{Float64}}, value::Tv) where Tv
+    cache = Dict{AbstractNode,Float64}()
+    _prob!(b, f, pr, cache, value)
+end
+
+function _prob!(b::MDDForest, f::AbstractTerminal, pr::Dict{NodeHeader,Vector{Float64}}, cache::Dict{AbstractNode,Float64}, value::Tv) where Tv
+    f.value == value && return 1.0
+    return 0.0
+end
+
+function _prob!(b::MDDForest, f::Node, pr::Dict{NodeHeader,Vector{Float64}}, cache::Dict{AbstractNode,Float64}, value::Tv) where Tv
+    get(cache, f) do
+        res = 0.0
+        fv = pr[f.header]
+        for i = 1:f.header.domain
+            res += fv[i] * _prob!(b, f.nodes[i], pr, cache, value)
+        end
+        cache[f] = res
+    end
+end
+
 ### operations
 
 function lt!(b::MDDForest, f::AbstractNode, g::AbstractNode)
-    apply!(b, MDDLT(), f, g)
+    apply!(b, MDDLt(), f, g)
 end
 
 function lte!(b::MDDForest, f::AbstractNode, g::AbstractNode)
@@ -434,6 +544,14 @@ function ifelse!(b::MDDForest, f::AbstractNode, g::AbstractNode, h::AbstractNode
     apply!(b, MDDUnion(), tmp1, tmp2)
 end
 
+function match!(b::MDDForest, args::Vararg{Tuple{AbstractNode,AbstractNode}})
+    tmp = default
+    for x = reverse(args)
+        tmp = ifelse!(x[1], x[2], tmp)
+    end
+    tmp
+end
+
 function max!(b::MDDForest, args...)
     tmp = args[1]
     for u = args[2:end]
@@ -446,6 +564,30 @@ function min!(b::MDDForest, args...)
     tmp = args[1]
     for u = args[2:end]
         tmp = apply!(b, MDDMin(), tmp, u)
+    end
+    tmp
+end
+
+function plus!(b::MDDForest, args...)
+    tmp = args[1]
+    for u = args[2:end]
+        tmp = apply!(b, MDDPlus(), tmp, u)
+    end
+    tmp
+end
+
+function minus!(b::MDDForest, args...)
+    tmp = args[1]
+    for u = args[2:end]
+        tmp = apply!(b, MDDMinus(), tmp, u)
+    end
+    tmp
+end
+
+function mul!(b::MDDForest, args...)
+    tmp = args[1]
+    for u = args[2:end]
+        tmp = apply!(b, MDDMul(), tmp, u)
     end
     tmp
 end

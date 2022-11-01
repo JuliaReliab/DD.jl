@@ -1,6 +1,7 @@
 import DD.MDD: MDDForest, NodeHeader, Terminal, Node, AbstractNode, todot, apply!, MDDMin, MDDMax
 import DD.MDD: MSSVariable, MSS, var!, val!, gte!, lt!, gt!, lte!, eq!, neq!, ifelse!, and!, or!, max!, min!, plus!, minus!, mul!, prob, @mss, ValueT
-import DD.MDD: MDDIf, MDDElse, getmax
+import DD.MDD: MDDIf, MDDElse, getbounds, getmaxbounds2, getminbounds2, getbounds2
+using Random
 
 @testset "MDD1" begin
     b = MDDForest()
@@ -301,7 +302,7 @@ end
 
 @testset "MSS12" begin
     mss = MSS()
-    n = 50
+    n = 5
     nn = Terminal(mss.dd, n)
     x = [var!(mss, Symbol(:x, i), 0:n) for i = 1:6]
     t1 = var!(mss, :t1, 1:6)
@@ -315,42 +316,42 @@ end
 
         x1dash = @mss mss.dd begin
             s == 1 && t1 == 1 && x[1] < nn => x[1] + 1
-            s == 1 && t1 == 2 && x[1] > 1 && x[2] < nn && x[3] < nn => x[1] - 1
+            s == 1 && t1 == 2 && x[1] >= 1 && x[2] < nn && x[3] < nn => x[1] - 1
             s == 1 => x[1]
             _ => None
         end
 
         x2dash = @mss mss.dd begin
-            s == 1 && t1 == 2 && x[1] > 1 && x[2] < nn && x[3] < nn => x[2] + 1
-            s == 1 && t1 == 3 && x[2] > 1 && x[4] < nn => x[2] - 1
+            s == 1 && t1 == 2 && x[1] >= 1 && x[2] < nn && x[3] < nn => x[2] + 1
+            s == 1 && t1 == 3 && x[2] >= 1 && x[4] < nn => x[2] - 1
             s == 1 => x[2]
             _ => None
         end
 
         x3dash = @mss mss.dd begin
-            s == 1 && t1 == 2 && x[1] > 1 && x[2] < nn && x[3] < nn => x[3] + 1
-            s == 1 && t1 == 4 && x[3] > 1 && x[5] < nn => x[3] - 1
+            s == 1 && t1 == 2 && x[1] >= 1 && x[2] < nn && x[3] < nn => x[3] + 1
+            s == 1 && t1 == 4 && x[3] >= 1 && x[5] < nn => x[3] - 1
             s == 1 => x[3]
             _ => None
         end
 
         x4dash = @mss mss.dd begin
-            s == 1 && t1 == 3 && x[2] > 1 && x[4] < nn => x[4] + 1
-            s == 1 && t1 == 5 && x[4] > 1 && x[5] > 1 && x[6] < nn => x[4] - 1
+            s == 1 && t1 == 3 && x[2] >= 1 && x[4] < nn => x[4] + 1
+            s == 1 && t1 == 5 && x[4] >= 1 && x[5] >= 1 && x[6] < nn => x[4] - 1
             s == 1 => x[4]
             _ => None
         end
 
         x5dash = @mss mss.dd begin
-            s == 1 && t1 == 4 && x[3] > 1 && x[5] < nn => x[5] + 1
-            s == 1 && t1 == 5 && x[4] > 1 && x[5] > 1 && x[6] < nn => x[5] - 1
+            s == 1 && t1 == 4 && x[3] >= 1 && x[5] < nn => x[5] + 1
+            s == 1 && t1 == 5 && x[4] >= 1 && x[5] >= 1 && x[6] < nn => x[5] - 1
             s == 1 => x[5]
             _ => None
         end
 
         x6dash = @mss mss.dd begin
-            s == 1 && t1 == 5 && x[4] > 1 && x[5] > 1 && x[6] < nn => x[6] + 1
-            s == 1 && t1 == 6 && x[6] > 1 => x[6] - 1
+            s == 1 && t1 == 5 && x[4] >= 1 && x[5] >= 1 && x[6] < nn => x[6] + 1
+            s == 1 && t1 == 6 && x[6] >= 1 => x[6] - 1
             s == 1 => x[6]
             _ => None
         end
@@ -359,148 +360,278 @@ end
 
         x1dash = @mss mss.dd begin
             t2 == 1 && x[1] < nn => x[1] + 1
-            t2 == 2 && x[1] > 1 && x[2] < nn && x[3] < nn => x[1] - 1
+            t2 == 2 && x[1] >= 1 && x[2] < nn && x[3] < nn => x[1] - 1
             _ => x[1]
         end    
 
         x2dash = @mss mss.dd begin
-            t2 == 2 && x[1] > 1 && x[2] < nn && x[3] < nn => x[2] + 1
-            t2 == 3 && x[2] > 1 && x[4] < nn => x[2] - 1
+            t2 == 2 && x[1] >= 1 && x[2] < nn && x[3] < nn => x[2] + 1
+            t2 == 3 && x[2] >= 1 && x[4] < nn => x[2] - 1
             _ => x[2]
         end
 
         x3dash = @mss mss.dd begin
-            t2 == 2 && x[1] > 1 && x[2] < nn && x[3] < nn => x[3] + 1
-            t2 == 4 && x[3] > 1 && x[5] < nn => x[3] - 1
+            t2 == 2 && x[1] >= 1 && x[2] < nn && x[3] < nn => x[3] + 1
+            t2 == 4 && x[3] >= 1 && x[5] < nn => x[3] - 1
             _ => x[3]
         end
 
         x4dash = @mss mss.dd begin
-            t2 == 3 && x[2] > 1 && x[4] < nn => x[4] + 1
-            t2 == 5 && x[4] > 1 && x[5] > 1 && x[6] < nn => x[4] - 1
+            t2 == 3 && x[2] >= 1 && x[4] < nn => x[4] + 1
+            t2 == 5 && x[4] >= 1 && x[5] >= 1 && x[6] < nn => x[4] - 1
             _ => x[4]
         end
 
         x5dash = @mss mss.dd begin
-            t2 == 4 && x[3] > 1 && x[5] < nn => x[5] + 1
-            t2 == 5 && x[4] > 1 && x[5] > 1 && x[6] < nn => x[5] - 1
+            t2 == 4 && x[3] >= 1 && x[5] < nn => x[5] + 1
+            t2 == 5 && x[4] >= 1 && x[5] >= 1 && x[6] < nn => x[5] - 1
             _ => x[5]
         end
 
         x6dash = @mss mss.dd begin
-            t2 == 5 && x[4] > 1 && x[5] > 1 && x[6] < nn => x[6] + 1
-            t2 == 6 && x[6] > 1 => x[6] - 1
+            t2 == 5 && x[4] >= 1 && x[5] >= 1 && x[6] < nn => x[6] + 1
+            t2 == 6 && x[6] >= 1 => x[6] - 1
             _ => x[6]
         end
     end
 
+    # v = getbounds(mss.dd, x1dash, [0,0,0,0,0,0,6,6], [n,n,n,n,n,n,6,6])
+    # println(v)
+
+    rng = MersenneTwister(1234)
     lower = [0, 0, 0, 0, 0, 0]
     upper = [n, n, n, n, n, n]
     @time begin
-        event = [rand(1:6), rand(1:6)]
+        event = [rand(rng, 1:6), rand(rng, 1:6)]
         l = cat(lower, event, dims=1)
         u = cat(upper, event, dims=1)
-        v1 = getmax(mss.dd, x1dash, l, u)
-        v2 = getmax(mss.dd, x2dash, l, u)
-        v3 = getmax(mss.dd, x3dash, l, u)
-        v4 = getmax(mss.dd, x4dash, l, u)
-        v5 = getmax(mss.dd, x5dash, l, u)
-        v6 = getmax(mss.dd, x6dash, l, u)
-        lower = [x[1] for x = [v1, v2, v3, v4, v5, v6]]
-        upper = [x[2] for x = [v1, v2, v3, v4, v5, v6]]
+        v1 = getbounds(mss.dd, x1dash, l, u)
+        v2 = getbounds(mss.dd, x2dash, l, u)
+        v3 = getbounds(mss.dd, x3dash, l, u)
+        v4 = getbounds(mss.dd, x4dash, l, u)
+        v5 = getbounds(mss.dd, x5dash, l, u)
+        v6 = getbounds(mss.dd, x6dash, l, u)
+        for (i,x) = enumerate([v1, v2, v3, v4, v5, v6])
+            lower[i] = x[1]
+            upper[i] = x[2]
+        end
         println(lower, upper)
     end
     @time begin
         for k = 1:1000
-            event = [rand(1:6),rand(1:6)]
+            event = [rand(rng, 1:6),rand(rng, 1:6)]
             l = cat(lower, event, dims=1)
             u = cat(upper, event, dims=1)
-            v1 = getmax(mss.dd, x1dash, l, u)
-            v2 = getmax(mss.dd, x2dash, l, u)
-            v3 = getmax(mss.dd, x3dash, l, u)
-            v4 = getmax(mss.dd, x4dash, l, u)
-            v5 = getmax(mss.dd, x5dash, l, u)
-            v6 = getmax(mss.dd, x6dash, l, u)
-            lower = [x[1] for x = [v1, v2, v3, v4, v5, v6]]
-            upper = [x[2] for x = [v1, v2, v3, v4, v5, v6]]
+            v1 = getbounds(mss.dd, x1dash, l, u)
+            v2 = getbounds(mss.dd, x2dash, l, u)
+            v3 = getbounds(mss.dd, x3dash, l, u)
+            v4 = getbounds(mss.dd, x4dash, l, u)
+            v5 = getbounds(mss.dd, x5dash, l, u)
+            v6 = getbounds(mss.dd, x6dash, l, u)
+            for (i,x) = enumerate([v1, v2, v3, v4, v5, v6])
+                lower[i] = x[1]
+                upper[i] = x[2]
+            end
             println(lower, upper)
         end
     end
 end
 
-# @testset "MSS12" begin
-#     n = 5
-#     mss = MSS()
-#     x = [var!(mss, Symbol(:x, i), 0:n) for i = 1:6]
-#     t = var!(mss, :t, 1:6)
+@testset "MSS13" begin
+    mss = MSS()
+    n = 5
+    nn = Terminal(mss.dd, n)
+    x = [var!(mss, Symbol(:x, i), 0:n) for i = 1:6]
+    x0 = x
+    t1 = var!(mss, :t1, 1:6)
+    t2 = var!(mss, :t2, 1:6)
 
-#     s = @mss mss.dd begin
-#         x[2] - x[3] + x[4] - x[5] == 0 => 1
-#         _ => 0
-#     end
+    @time begin
+        s = @mss mss.dd begin
+            x[2] - x[3] + x[4] - x[5] == 0 => 1
+            _ => None
+        end
 
-#     x1dash = @mss mss.dd begin
-#         s == 1 && t == 1 && x[1] < 5 => x[1] + 1
-#         s == 1 && t == 2 && x[1] > 1 && x[2] < 5 && x[3] < 5 => x[1] - 1
-#         s == 1 => x[1]
-#         _ => None
-#     end
+        x1dash = @mss mss.dd begin
+            s == 1 && t1 == 1 && x[1] < nn => 1
+            s == 1 && t1 == 2 && x[1] >= 1 && x[2] < nn && x[3] < nn => -1
+            s == 1 => 0
+            _ => None
+        end
 
-#     println(todot(mss.dd, x1dash))
+        x2dash = @mss mss.dd begin
+            s == 1 && t1 == 2 && x[1] >= 1 && x[2] < nn && x[3] < nn => 1
+            s == 1 && t1 == 3 && x[2] >= 1 && x[4] < nn => -1
+            s == 1 => 0
+            _ => None
+        end
 
-#     x2dash = @mss mss.dd begin
-#         s == 1 && t == 2 && x[1] > 1 && x[2] < 5 && x[3] < 5 => x[2] + 1
-#         s == 1 && t == 3 && x[2] > 1 && x[4] < 5 => x[2] - 1
-#         s == 1 => x[2]
-#         _ => None
-#     end
+        x3dash = @mss mss.dd begin
+            s == 1 && t1 == 2 && x[1] >= 1 && x[2] < nn && x[3] < nn => 1
+            s == 1 && t1 == 4 && x[3] >= 1 && x[5] < nn => -1
+            s == 1 => 0
+            _ => None
+        end
 
-#     println(todot(mss.dd, x2dash))
+        x4dash = @mss mss.dd begin
+            s == 1 && t1 == 3 && x[2] >= 1 && x[4] < nn => 1
+            s == 1 && t1 == 5 && x[4] >= 1 && x[5] >= 1 && x[6] < nn => -1
+            s == 1 => 0
+            _ => None
+        end
 
-#     x3dash = @mss mss.dd begin
-#         s == 1 && t == 2 && x[1] > 1 && x[2] < 5 && x[3] < 5 => x[3] + 1
-#         s == 1 && t == 4 && x[3] > 1 && x[5] < 5 => x[3] - 1
-#         s == 1 => x[3]
-#         _ => None
-#     end
+        x5dash = @mss mss.dd begin
+            s == 1 && t1 == 4 && x[3] >= 1 && x[5] < nn => 1
+            s == 1 && t1 == 5 && x[4] >= 1 && x[5] >= 1 && x[6] < nn => -1
+            s == 1 => 0
+            _ => None
+        end
 
-#     println(todot(mss.dd, x3dash))
+        x6dash = @mss mss.dd begin
+            s == 1 && t1 == 5 && x[4] >= 1 && x[5] >= 1 && x[6] < nn => 1
+            s == 1 && t1 == 6 && x[6] >= 1 => -1
+            s == 1 => 0
+            _ => None
+        end
 
-#     x4dash = @mss mss.dd begin
-#         s == 1 && t == 3 && x[2] > 1 && x[4] < 5 => x[4] + 1
-#         s == 1 && t == 5 && x[4] > 1 && x[5] > 1 && x[6] < 5 => x[4] - 1
-#         s == 1 => x[4]
-#         _ => None
-#     end
+        # x6dash = @mss mss.dd begin
+        #     t1 == 5 && x[4] >= 1 && x[5] >= 1 && x[6] < nn => 1
+        #     t1 == 6 && x[6] >= 1 => -1
+        #     _ => 0
+        # end
 
-#     println(todot(mss.dd, x4dash))
+        # println(todot(mss.dd, x6dash))
 
-#     x5dash = @mss mss.dd begin
-#         s == 1 && t == 4 && x[3] > 1 && x[5] < 5 => x[5] + 1
-#         s == 1 && t == 5 && x[4] > 1 && x[5] > 1 && x[6] < 5 => x[5] - 1
-#         s == 1 => x[5]
-#         _ => None
-#     end
+        dx = [x1dash, x2dash, x3dash, x4dash, x5dash, x6dash]
+        x = [plus!(mss.dd, x[i], dx[i]) for i = 1:6]
 
-#     println(todot(mss.dd, x5dash))
+        x1dash = @mss mss.dd begin
+            t2 == 1 && x[1] < nn => dx[1] + 1
+            t2 == 2 && x[1] >= 1 && x[2] < nn && x[3] < nn => dx[1] - 1
+            _ => dx[1]
+        end    
 
-#     x6dash = @mss mss.dd begin
-#         s == 1 && t == 5 && x[4] > 1 && x[5] > 1 && x[6] < 5 => x[6] + 1
-#         s == 1 && t == 6 && x[6] > 1 => x[6] - 1
-#         s == 1 => x[6]
-#         _ => None
-#     end
+        x2dash = @mss mss.dd begin
+            t2 == 2 && x[1] >= 1 && x[2] < nn && x[3] < nn => dx[2] + 1
+            t2 == 3 && x[2] >= 1 && x[4] < nn => dx[2] - 1
+            _ => dx[2]
+        end
 
-#     println(todot(mss.dd, x6dash))
+        x3dash = @mss mss.dd begin
+            t2 == 2 && x[1] >= 1 && x[2] < nn && x[3] < nn => dx[3] + 1
+            t2 == 4 && x[3] >= 1 && x[5] < nn => dx[3] - 1
+            _ => dx[3]
+        end
 
-#     xdash = [x1dash, x2dash, x3dash, x4dash, x5dash, x6dash]
-#     t1 = var!(mss, :t1, 1:6)
+        x4dash = @mss mss.dd begin
+            t2 == 3 && x[2] >= 1 && x[4] < nn => dx[4] + 1
+            t2 == 5 && x[4] >= 1 && x[5] >= 1 && x[6] < nn => dx[4] - 1
+            _ => dx[4]
+        end
 
-#     x1dash = @mss mss.dd begin
-#         t1 == 1 && xdash[1] < 5 => xdash[1] + 1
-#         t1 == 2 && xdash[1] > 1 && xdash[2] < 5 && xdash[3] < 5 => xdash[1] - 1
-#         _ => xdash[1]
-#     end    
+        x5dash = @mss mss.dd begin
+            t2 == 4 && x[3] >= 1 && x[5] < nn => dx[5] + 1
+            t2 == 5 && x[4] >= 1 && x[5] >= 1 && x[6] < nn => dx[5] - 1
+            _ => dx[5]
+        end
 
-#     println(todot(mss.dd, x1dash))
-# end
+        x6dash = @mss mss.dd begin
+            t2 == 5 && x[4] >= 1 && x[5] >= 1 && x[6] < nn => dx[6] + 1
+            t2 == 6 && x[6] >= 1 => dx[6] - 1
+            _ => dx[6]
+        end
+    end
+
+    # println(todot(mss.dd, plus!(mss.dd, x6dash, x0[6])))
+
+    # x1dash =  plus!(mss.dd, x1dash, x0[1])
+    # x2dash =  plus!(mss.dd, x2dash, x0[2])
+    # x3dash =  plus!(mss.dd, x3dash, x0[3])
+    # x4dash =  plus!(mss.dd, x4dash, x0[4])
+    # x5dash =  plus!(mss.dd, x5dash, x0[5])
+    # x6dash =  plus!(mss.dd, x6dash, x0[6])
+    # rng = MersenneTwister(1234)
+    # lower = [0, 0, 0, 0, 0, 0]
+    # upper = [n, n, n, n, n, n]
+    # @time begin
+    #     event = [rand(rng, 1:6), rand(rng, 1:6)]
+    #     l = cat(lower, event, dims=1)
+    #     u = cat(upper, event, dims=1)
+    #     v1 = getbounds(mss.dd, x1dash, l, u)
+    #     v2 = getbounds(mss.dd, x2dash, l, u)
+    #     v3 = getbounds(mss.dd, x3dash, l, u)
+    #     v4 = getbounds(mss.dd, x4dash, l, u)
+    #     v5 = getbounds(mss.dd, x5dash, l, u)
+    #     v6 = getbounds(mss.dd, x6dash, l, u)
+    #     for (i,x) = enumerate([v1, v2, v3, v4, v5, v6])
+    #         lower[i] = x[1]
+    #         upper[i] = x[2]
+    #     end
+    #     println(lower, upper)
+    # end
+    # @time begin
+    #     for k = 1:1000
+    #         event = [rand(rng, 1:6),rand(rng, 1:6)]
+    #         l = cat(lower, event, dims=1)
+    #         u = cat(upper, event, dims=1)
+    #         v1 = getbounds(mss.dd, x1dash, l, u)
+    #         v2 = getbounds(mss.dd, x2dash, l, u)
+    #         v3 = getbounds(mss.dd, x3dash, l, u)
+    #         v4 = getbounds(mss.dd, x4dash, l, u)
+    #         v5 = getbounds(mss.dd, x5dash, l, u)
+    #         v6 = getbounds(mss.dd, x6dash, l, u)
+    #         for (i,x) = enumerate([v1, v2, v3, v4, v5, v6])
+    #             lower[i] = x[1]
+    #             upper[i] = x[2]
+    #         end
+    #         println(lower, upper)
+    #     end
+    # end
+
+    # TODO: getbounds2 is wrong
+    @time begin
+        v = getbounds2(mss.dd, x6dash, [0,0,0,0,0,0,6,1], [n,n,n,n,n,n,6,1], 6)
+        println(v)
+    end
+
+    rng = MersenneTwister(1234)
+    lower = [0, 0, 0, 0, 0, 0]
+    upper = [n, n, n, n, n, n]
+    @time begin
+        event = [rand(rng, 1:6), rand(rng, 1:6)]
+        println(event)
+        l = cat(lower, event, dims=1)
+        u = cat(upper, event, dims=1)
+        v1 = getbounds2(mss.dd, x1dash, l, u, 1)
+        v2 = getbounds2(mss.dd, x2dash, l, u, 2)
+        v3 = getbounds2(mss.dd, x3dash, l, u, 3)
+        v4 = getbounds2(mss.dd, x4dash, l, u, 4)
+        v5 = getbounds2(mss.dd, x5dash, l, u, 5)
+        v6 = getbounds2(mss.dd, x6dash, l, u, 6)
+        for (i,x) = enumerate([v1, v2, v3, v4, v5, v6])
+            lower[i] = x[1]
+            upper[i] = x[2]
+        end
+        println(lower, upper)
+    end
+    @time begin
+        for k = 1:1000
+            event = [rand(rng, 1:6),rand(rng, 1:6)]
+            l = cat(lower, event, dims=1)
+            u = cat(upper, event, dims=1)
+            v1 = getbounds2(mss.dd, x1dash, l, u, 1)
+            v2 = getbounds2(mss.dd, x2dash, l, u, 2)
+            v3 = getbounds2(mss.dd, x3dash, l, u, 3)
+            v4 = getbounds2(mss.dd, x4dash, l, u, 4)
+            v5 = getbounds2(mss.dd, x5dash, l, u, 5)
+            v6 = getbounds2(mss.dd, x6dash, l, u, 6)
+            for (i,x) = enumerate([v1, v2, v3, v4, v5, v6])
+                lower[i] = x[1]
+                upper[i] = x[2]
+            end
+            println(lower, upper)
+        end
+    end
+end
+
+

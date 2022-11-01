@@ -498,27 +498,27 @@ function _prob!(b::MDDForest, f::Node, pr::Dict{NodeHeader,Vector{Float64}}, cac
 end
 
 """
-getmax(forest, f, lower, upper)
+getbounds(forest, f, lower, upper)
 """
 
-function getmax(b::MDDForest, f::AbstractNode, lower::Vector{ValueT}, upper::Vector{ValueT})
+function getbounds(b::MDDForest, f::AbstractNode, lower::Vector{ValueT}, upper::Vector{ValueT})
     cache = Dict()
-    _getmax!(b, f, lower, upper, cache)
+    _getbounds!(b, f, lower, upper, cache)
 end
 
-function _getmax!(b::MDDForest, f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
+function _getbounds!(b::MDDForest, f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
     [f.value, f.value]
 end
 
-function _getmax!(b::MDDForest, f::Terminal{Undetermined}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
+function _getbounds!(b::MDDForest, f::Terminal{Undetermined}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
     [Undetermined(), Undetermined()]
 end
 
-function _getmax!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, cache)
+function _getbounds!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, cache)
     get(cache, f) do
         m = Any[Undetermined(), Undetermined()]
         for i = f.header.index[lower[f.header.level]]:f.header.index[upper[f.header.level]]
-            lres, ures = _getmax!(b, f.nodes[i], lower, upper, cache)
+            lres, ures = _getbounds!(b, f.nodes[i], lower, upper, cache)
             if lres != Undetermined() && (m[1] == Undetermined() || lres < m[1])
                 m[1] = lres
             end
@@ -528,6 +528,99 @@ function _getmax!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{Va
         end
         cache[f] = m
     end
+end
+
+"""
+getmaxbounds2(forest, f, lower, upper)
+"""
+
+function getmaxbounds2(b::MDDForest, f::AbstractNode, lower::Vector{ValueT}, upper::Vector{ValueT}, id)
+    cache = Dict()
+    _getmaxbounds2!(b, f, lower, upper, upper[id], lower[id], id, cache)
+end
+
+function _getmaxbounds2!(b::MDDForest, f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, x, m, id, cache)
+    if x + f.value > m
+        x + f.value
+    else
+        m
+    end
+end
+
+function _getmaxbounds2!(b::MDDForest, f::Terminal{Undetermined}, ::Vector{ValueT}, ::Vector{ValueT}, x, m, id, cache)
+    m
+end
+
+function _getmaxbounds2!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, x, m, id, cache)
+    if f.header.level == id
+        maxvalue = m
+        for v = lower[f.header.level]:upper[f.header.level]
+            i = f.header.index[v]
+            tmp = _getmaxbounds2!(b, f.nodes[i], lower, upper, v, maxvalue, id, cache)
+            if tmp > maxvalue
+                maxvalue = tmp
+            end
+        end
+        maxvalue
+    else
+        maxvalue = m
+        for v = lower[f.header.level]:upper[f.header.level]
+            i = f.header.index[v]
+            tmp = _getmaxbounds2!(b, f.nodes[i], lower, upper, x, maxvalue, id, cache)
+            if tmp > maxvalue
+                maxvalue = tmp
+            end
+        end
+        maxvalue
+    end
+end
+
+##
+
+function getminbounds2(b::MDDForest, f::AbstractNode, lower::Vector{ValueT}, upper::Vector{ValueT}, id)
+    cache = Dict()
+    _getminbounds2!(b, f, lower, upper, lower[id], upper[id], id, cache)
+end
+
+function _getminbounds2!(b::MDDForest, f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, x, m, id, cache)
+    if x + f.value < m
+        x + f.value
+    else
+        m
+    end
+end
+
+function _getminbounds2!(b::MDDForest, f::Terminal{Undetermined}, ::Vector{ValueT}, ::Vector{ValueT}, x, m, id, cache)
+    m
+end
+
+function _getminbounds2!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, x, m, id, cache)
+    if f.header.level == id
+        minvalue = m
+        for v = lower[f.header.level]:upper[f.header.level]
+            i = f.header.index[v]
+            tmp = _getminbounds2!(b, f.nodes[i], lower, upper, v, minvalue, id, cache)
+            if tmp < minvalue
+                minvalue = tmp
+            end
+        end
+        minvalue
+    else
+        minvalue = m
+        for v = lower[f.header.level]:upper[f.header.level]
+            i = f.header.index[v]
+            tmp = _getminbounds2!(b, f.nodes[i], lower, upper, x, minvalue, id, cache)
+            if tmp < minvalue
+                minvalue = tmp
+            end
+        end
+        minvalue
+    end
+end
+
+function getbounds2(b::MDDForest, f::AbstractNode, lower::Vector{ValueT}, upper::Vector{ValueT}, id)
+    cache = Dict()
+    (_getminbounds2!(b, f, lower, upper, lower[id], upper[id], id, cache), _getmaxbounds2!(b, f, lower, upper, upper[id], lower[id], id, cache))
 end
 
 ### operations

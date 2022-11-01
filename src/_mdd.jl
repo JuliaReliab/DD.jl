@@ -105,14 +105,15 @@ mutable struct NodeHeader
     level::LevelT
     domain::DomainT
     label::Symbol
-    domainLabels::Vector{Symbol}
+    domainLabels::Vector{DomainT}
+    index::Dict{DomainT,Int}
 
     function NodeHeader(level::LevelT, domain::DomainT)
-        new(level, level, domain, Symbol(level), [Symbol(i) for i = 1:domain])
+        new(level, level, domain, Symbol(level), [i for i = 1:domain], Dict([i => i for i = 1:domain]...))
     end
 
-    function NodeHeader(level::LevelT, label::Symbol, domain::Vector{Symbol})
-        new(level, level, length(domain), label, domain)
+    function NodeHeader(level::LevelT, label::Symbol, domain::Vector{DomainT})
+        new(level, level, length(domain), label, domain, Dict([x => i for (i,x) = enumerate(domain)]...))
     end
 end
 
@@ -241,14 +242,6 @@ function _apply!(b::MDDForest, op::AbstractOperator, f::Node, g::AbstractTermina
         b.cache[key] = ans
     end
 end
-
-# function _apply!(b::MDDForest, op::AbstractOperator, f::Terminal{Undetermined}, g::Node)
-#     f
-# end
-
-# function _apply!(b::MDDForest, op::AbstractOperator, f::Node, g::Terminal{Undetermined})
-#     g
-# end
 
 for op = [:MDDMin, :MDDMax, :MDDPlus, :MDDMinus, :MDDMul, :MDDLte, :MDDLt, :MDDGte, :MDDGt, :MDDEq, :MDDNeq]
     @eval function _apply!(b::MDDForest, ::$op, ::Terminal{ValueT}, ::Terminal{Undetermined})
@@ -501,6 +494,39 @@ function _prob!(b::MDDForest, f::Node, pr::Dict{NodeHeader,Vector{Float64}}, cac
             res += fv[i] * _prob!(b, f.nodes[i], pr, cache, value)
         end
         cache[f] = res
+    end
+end
+
+"""
+getmax(forest, f, lower, upper)
+"""
+
+function getmax(b::MDDForest, f::AbstractNode, lower::Vector{ValueT}, upper::Vector{ValueT})
+    cache = Dict()
+    _getmax!(b, f, lower, upper, cache)
+end
+
+function _getmax!(b::MDDForest, f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
+    [f.value, f.value]
+end
+
+function _getmax!(b::MDDForest, f::Terminal{Undetermined}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
+    [Undetermined(), Undetermined()]
+end
+
+function _getmax!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, cache)
+    get(cache, f) do
+        m = Any[Undetermined(), Undetermined()]
+        for i = f.header.index[lower[f.header.level]]:f.header.index[upper[f.header.level]]
+            lres, ures = _getmax!(b, f.nodes[i], lower, upper, cache)
+            if lres != Undetermined() && (m[1] == Undetermined() || lres < m[1])
+                m[1] = lres
+            end
+            if ures != Undetermined() && (m[2] == Undetermined() || ures > m[2])
+                m[2] = ures
+            end
+        end
+        cache[f] = m
     end
 end
 

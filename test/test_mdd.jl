@@ -1,6 +1,6 @@
 import DD.MDD: MDDForest, NodeHeader, Terminal, Node, AbstractNode, todot, apply!, MDDMin, MDDMax
 import DD.MDD: MSSVariable, MSS, var!, val!, gte!, lt!, gt!, lte!, eq!, neq!, ifelse!, and!, or!, max!, min!, plus!, minus!, mul!, prob, @mss, ValueT
-import DD.MDD: MDDIf, MDDElse
+import DD.MDD: MDDIf, MDDElse, getmax
 
 @testset "MDD1" begin
     b = MDDForest()
@@ -301,23 +301,131 @@ end
 
 @testset "MSS12" begin
     mss = MSS()
-    n = 5
+    n = 50
+    nn = Terminal(mss.dd, n)
     x = [var!(mss, Symbol(:x, i), 0:n) for i = 1:6]
-    t = var!(mss, :t, 1:6)
+    t1 = var!(mss, :t1, 1:6)
+    t2 = var!(mss, :t2, 1:6)
 
-    s = @mss mss.dd begin
-        x[2] - x[3] + x[4] - x[5] == 0 => 1
-        _ => None
+    @time begin
+        s = @mss mss.dd begin
+            x[2] - x[3] + x[4] - x[5] == 0 => 1
+            _ => None
+        end
+
+        x1dash = @mss mss.dd begin
+            s == 1 && t1 == 1 && x[1] < nn => x[1] + 1
+            s == 1 && t1 == 2 && x[1] > 1 && x[2] < nn && x[3] < nn => x[1] - 1
+            s == 1 => x[1]
+            _ => None
+        end
+
+        x2dash = @mss mss.dd begin
+            s == 1 && t1 == 2 && x[1] > 1 && x[2] < nn && x[3] < nn => x[2] + 1
+            s == 1 && t1 == 3 && x[2] > 1 && x[4] < nn => x[2] - 1
+            s == 1 => x[2]
+            _ => None
+        end
+
+        x3dash = @mss mss.dd begin
+            s == 1 && t1 == 2 && x[1] > 1 && x[2] < nn && x[3] < nn => x[3] + 1
+            s == 1 && t1 == 4 && x[3] > 1 && x[5] < nn => x[3] - 1
+            s == 1 => x[3]
+            _ => None
+        end
+
+        x4dash = @mss mss.dd begin
+            s == 1 && t1 == 3 && x[2] > 1 && x[4] < nn => x[4] + 1
+            s == 1 && t1 == 5 && x[4] > 1 && x[5] > 1 && x[6] < nn => x[4] - 1
+            s == 1 => x[4]
+            _ => None
+        end
+
+        x5dash = @mss mss.dd begin
+            s == 1 && t1 == 4 && x[3] > 1 && x[5] < nn => x[5] + 1
+            s == 1 && t1 == 5 && x[4] > 1 && x[5] > 1 && x[6] < nn => x[5] - 1
+            s == 1 => x[5]
+            _ => None
+        end
+
+        x6dash = @mss mss.dd begin
+            s == 1 && t1 == 5 && x[4] > 1 && x[5] > 1 && x[6] < nn => x[6] + 1
+            s == 1 && t1 == 6 && x[6] > 1 => x[6] - 1
+            s == 1 => x[6]
+            _ => None
+        end
+
+        x = [x1dash, x2dash, x3dash, x4dash, x5dash, x6dash]
+
+        x1dash = @mss mss.dd begin
+            t2 == 1 && x[1] < nn => x[1] + 1
+            t2 == 2 && x[1] > 1 && x[2] < nn && x[3] < nn => x[1] - 1
+            _ => x[1]
+        end    
+
+        x2dash = @mss mss.dd begin
+            t2 == 2 && x[1] > 1 && x[2] < nn && x[3] < nn => x[2] + 1
+            t2 == 3 && x[2] > 1 && x[4] < nn => x[2] - 1
+            _ => x[2]
+        end
+
+        x3dash = @mss mss.dd begin
+            t2 == 2 && x[1] > 1 && x[2] < nn && x[3] < nn => x[3] + 1
+            t2 == 4 && x[3] > 1 && x[5] < nn => x[3] - 1
+            _ => x[3]
+        end
+
+        x4dash = @mss mss.dd begin
+            t2 == 3 && x[2] > 1 && x[4] < nn => x[4] + 1
+            t2 == 5 && x[4] > 1 && x[5] > 1 && x[6] < nn => x[4] - 1
+            _ => x[4]
+        end
+
+        x5dash = @mss mss.dd begin
+            t2 == 4 && x[3] > 1 && x[5] < nn => x[5] + 1
+            t2 == 5 && x[4] > 1 && x[5] > 1 && x[6] < nn => x[5] - 1
+            _ => x[5]
+        end
+
+        x6dash = @mss mss.dd begin
+            t2 == 5 && x[4] > 1 && x[5] > 1 && x[6] < nn => x[6] + 1
+            t2 == 6 && x[6] > 1 => x[6] - 1
+            _ => x[6]
+        end
     end
 
-    x1dash = @mss mss.dd begin
-        s == 1 && t == 1 && x[1] < 5 => x[1] + 1
-        s == 1 && t == 2 && x[1] > 1 && x[2] < 5 && x[3] < 5 => x[1] - 1
-        s == 1 => x[1]
-        _ => None
+    lower = [0, 0, 0, 0, 0, 0]
+    upper = [n, n, n, n, n, n]
+    @time begin
+        event = [rand(1:6), rand(1:6)]
+        l = cat(lower, event, dims=1)
+        u = cat(upper, event, dims=1)
+        v1 = getmax(mss.dd, x1dash, l, u)
+        v2 = getmax(mss.dd, x2dash, l, u)
+        v3 = getmax(mss.dd, x3dash, l, u)
+        v4 = getmax(mss.dd, x4dash, l, u)
+        v5 = getmax(mss.dd, x5dash, l, u)
+        v6 = getmax(mss.dd, x6dash, l, u)
+        lower = [x[1] for x = [v1, v2, v3, v4, v5, v6]]
+        upper = [x[2] for x = [v1, v2, v3, v4, v5, v6]]
+        println(lower, upper)
     end
-
-    println(todot(mss.dd, x1dash))
+    @time begin
+        for k = 1:1000
+            event = [rand(1:6),rand(1:6)]
+            l = cat(lower, event, dims=1)
+            u = cat(upper, event, dims=1)
+            v1 = getmax(mss.dd, x1dash, l, u)
+            v2 = getmax(mss.dd, x2dash, l, u)
+            v3 = getmax(mss.dd, x3dash, l, u)
+            v4 = getmax(mss.dd, x4dash, l, u)
+            v5 = getmax(mss.dd, x5dash, l, u)
+            v6 = getmax(mss.dd, x6dash, l, u)
+            lower = [x[1] for x = [v1, v2, v3, v4, v5, v6]]
+            upper = [x[2] for x = [v1, v2, v3, v4, v5, v6]]
+            println(lower, upper)
+        end
+    end
 end
 
 # @testset "MSS12" begin

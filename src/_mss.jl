@@ -23,7 +23,7 @@ mutable struct MSS{Ts,Tx}
 end
 
 function var!(mss::MSS{Ts,Tx}, name::Ts, domain::AbstractVector{Tx}) where {Ts,Tx}
-    header = NodeHeader(length(mss.vars), name, [Symbol(i) for i = domain])
+    header = NodeHeader(length(mss.vars)+1, name, collect(domain))
     f = Node(mss.dd, header, AbstractNode[Terminal(mss.dd, x) for x = domain])
     mss.vars[name] = MSSVariable{Ts,Tx}(name, domain, header, f)
     f

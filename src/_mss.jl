@@ -4,6 +4,165 @@ MSS
 
 #export bdd, header!, var!, node!, not, and, or, xor, imp, ite, todot
 
+"""
+prob(forest, f)
+"""
+
+function prob(b::MDDForest, f::AbstractNode, pr::Dict{NodeHeader,Vector{Float64}}, value::Tv) where Tv
+    cache = Dict{NodeID,Float64}()
+    _prob!(b, f, pr, cache, value)
+end
+
+function _prob!(b::MDDForest, f::AbstractTerminal, pr::Dict{NodeHeader,Vector{Float64}}, cache::Dict{NodeID,Float64}, value::Tv) where Tv
+    f.value == value && return 1.0
+    return 0.0
+end
+
+function _prob!(b::MDDForest, f::Node, pr::Dict{NodeHeader,Vector{Float64}}, cache::Dict{NodeID,Float64}, value::Tv) where Tv
+    get(cache, f.id) do
+        res = 0.0
+        fv = pr[f.header]
+        for i = eachindex(f.header.domains)
+            res += fv[i] * _prob!(b, f.nodes[i], pr, cache, value)
+        end
+        cache[f.id] = res
+    end
+end
+
+"""
+getbounds(forest, f, lower, upper)
+"""
+
+function getbounds(b::MDDForest, f::AbstractNode, lower::Vector{ValueT}, upper::Vector{ValueT})
+    cache = Dict()
+    _getbounds!(b, f, lower, upper, cache)
+end
+
+function _getbounds!(b::MDDForest, f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
+    [f.value, f.value]
+end
+
+function _getbounds!(b::MDDForest, f::Terminal{Undetermined}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
+    [Undetermined(), Undetermined()]
+end
+
+function _getbounds!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, cache)
+    get(cache, f.id) do
+        m = Any[Undetermined(), Undetermined()]
+        for i = f.header.index[lower[f.header.level]]:f.header.index[upper[f.header.level]]
+            lres, ures = _getbounds!(b, f.nodes[i], lower, upper, cache)
+            if lres != Undetermined() && (m[1] == Undetermined() || lres < m[1])
+                m[1] = lres
+            end
+            if ures != Undetermined() && (m[2] == Undetermined() || ures > m[2])
+                m[2] = ures
+            end
+        end
+        cache[f.id] = m
+    end
+end
+
+"""
+getmaxbounds2(forest, f, lower, upper)
+"""
+
+function getbounds3(b::MDDForest, f::AbstractNode, lower::Vector{ValueT}, upper::Vector{ValueT}, id)
+    result1 = []
+    result2 = []
+    _getidnode!(b, f, lower, upper, id, Set(), result1, result2)
+    # println(result1)
+    # println(result2)
+    if length(result1) == 0 && length(result2) == 0
+        [lower[id], upper[id]]
+    else
+        cache = Dict()
+        m = [65535, -1]
+        for x = result1
+            _getbounds3!(b, x, lower, upper, cache)
+            for v = lower[x.header.level]:upper[x.header.level]
+                i = x.header.index[v]
+                tmp = cache[x.nodes[i].id]
+                if tmp[1] != Undetermined()
+                    m[1] = min(m[1], v + tmp[1])
+                    m[2] = max(m[2], v + tmp[2])
+                end
+            end
+            # println(todot(b, x))
+        end
+        # println("m", m)
+        for x = result2
+            tmp = _getbounds3!(b, x, lower, upper, cache)
+            if tmp[1] != Undetermined()
+                m[1] = min(m[1], lower[id] + tmp[1])
+                m[2] = max(m[2], upper[id] + tmp[2])
+            end
+        end
+    end
+    m
+end
+
+function _getidnode!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, id, visited, result1, result2)
+    if in(f.id, visited)
+        return
+    end
+    if f.header.level == id
+        push!(visited, f.id)
+        push!(result1, f)
+        return
+    end
+    if f.header.level < id
+        push!(visited, f.id)
+        push!(result2, f)
+        return
+    end
+    for v = lower[f.header.level]:upper[f.header.level]
+        i = f.header.index[v]
+        _getidnode!(b, f.nodes[i], lower, upper, id, visited, result1, result2)
+        push!(visited, f.id)
+    end
+end
+
+function _getidnode!(b::MDDForest, f::Terminal{ValueT}, lower::Vector{ValueT}, upper::Vector{ValueT}, id, visited, result1, result2)
+    if in(f.id, visited)
+        return
+    end
+    push!(visited, f.id)
+    push!(result2, f)
+end
+
+function _getidnode!(b::MDDForest, f::Terminal{Undetermined}, lower::Vector{ValueT}, upper::Vector{ValueT}, id, visited, result1, result2)
+    return
+end
+
+function _getbounds3!(b::MDDForest, f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
+    get(cache, f.id) do
+        cache[f.id] = [f.value, f.value]
+    end
+end
+
+function _getbounds3!(b::MDDForest, f::Terminal{Undetermined}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
+    get(cache, f.id) do
+        cache[f.id] = [Undetermined(), Undetermined()]
+    end
+end
+
+function _getbounds3!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, cache)
+    get(cache, f.id) do
+        m = Any[Undetermined(), Undetermined()]
+        for i = f.header.index[lower[f.header.level]]:f.header.index[upper[f.header.level]]
+            lres, ures = _getbounds3!(b, f.nodes[i], lower, upper, cache)
+            if lres != Undetermined() && (m[1] == Undetermined() || lres < m[1])
+                m[1] = lres
+            end
+            if ures != Undetermined() && (m[2] == Undetermined() || ures > m[2])
+                m[2] = ures
+            end
+        end
+        cache[f.id] = m
+    end
+end
+
+
 mutable struct MSSVariable{Ts,Tx}
     label::Ts
     domain::Vector{Tx}
@@ -23,10 +182,9 @@ mutable struct MSS{Ts,Tx}
 end
 
 function var!(mss::MSS{Ts,Tx}, name::Ts, domain::AbstractVector{Tx}) where {Ts,Tx}
-    header = NodeHeader(length(mss.vars)+1, name, collect(domain))
-    f = Node(mss.dd, header, AbstractNode[Terminal(mss.dd, x) for x = domain])
-    mss.vars[name] = MSSVariable{Ts,Tx}(name, domain, header, f)
-    f
+    x = var!(mss.dd, name, length(mss.vars)+1, domain)
+    mss.vars[name] = MSSVariable{Ts,Tx}(name, domain, x.header, x)
+    x
 end
 
 function val!(mss::MSS{Ts,Tx}, value::Tx) where {Ts,Tx}
@@ -66,7 +224,7 @@ end
 
 function _cond(mss, s::Symbol)
     if s == :None
-        Expr(:call, :Terminal, mss, Expr(:quote, s))
+        Expr(:call, :Terminal, mss)
     else
         s
     end

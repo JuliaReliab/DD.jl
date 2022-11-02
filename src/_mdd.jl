@@ -7,6 +7,26 @@ module MDD
 import Base
 #export bdd, header!, var!, node!, not, and, or, xor, imp, ite, todot
 
+export
+    lt!,
+    lte!,
+    gt!,
+    gte!,
+    eq!,
+    neq!,
+    plus!,
+    minus!,
+    mul!,
+    max!,
+    min!,
+    and,
+    or,
+    and!,
+    or!,
+    not!,
+    todot,
+    mdd
+
 """
 AbstractNode{Ts}
 
@@ -27,10 +47,8 @@ type alias
 
 struct Undetermined end
 
-const HeaderID = UInt
 const NodeID = UInt
 const LevelT = Int
-const DomainT = Int
 const ValueT = Int
 
 abstract type AbstractOperator end
@@ -77,7 +95,8 @@ Todo: Get rid of `mutable` (export `totalnodeid` to BDDNodeManager?)
 
 mutable struct MDDForest
     mgr::NodeManager
-    utable::Dict{Tuple{HeaderID,Vector{NodeID}},AbstractNode}
+    hmgr::NodeManager
+    utable::Dict{Tuple{NodeID,Vector{NodeID}},AbstractNode}
     vtable::Dict{ValueT,AbstractNode}
     zero::AbstractTerminal
     one::AbstractTerminal
@@ -85,14 +104,16 @@ mutable struct MDDForest
     cache::Dict{Tuple{AbstractOperator,NodeID,NodeID},AbstractNode}
 
     function MDDForest()
-        mgr = NodeManager(0)
-        ut = Dict{Tuple{HeaderID,Vector{NodeID}},AbstractNode}()
-        vt = Dict{ValueT,AbstractNode}()
-        zero = Terminal{Bool}(_get_next!(mgr), false)
-        one = Terminal{Bool}(_get_next!(mgr), true)
-        undetermined = Terminal{Undetermined}(_get_next!(mgr), Undetermined())
-        cache = Dict{Tuple{AbstractOperator,NodeID,NodeID},AbstractNode}()
-        new(mgr, ut, vt, zero, one, undetermined, cache)
+        b = new()
+        b.mgr = NodeManager(0)
+        b.hmgr = NodeManager(0)
+        b.utable = Dict{Tuple{NodeID,Vector{NodeID}},AbstractNode}()
+        b.vtable = Dict{ValueT,AbstractNode}()
+        b.zero = Terminal{Bool}(b, _get_next!(b.mgr), false)
+        b.one = Terminal{Bool}(b, _get_next!(b.mgr), true)
+        b.undetermined = Terminal{Undetermined}(b, _get_next!(b.mgr), Undetermined())
+        b.cache = Dict{Tuple{AbstractOperator,NodeID,NodeID},AbstractNode}()
+        b
     end
 end
 
@@ -101,23 +122,23 @@ struct
 """
 
 mutable struct NodeHeader
-    id::HeaderID
+    id::NodeID
     level::LevelT
-    domain::DomainT
     label::Symbol
-    domainLabels::Vector{DomainT}
-    index::Dict{DomainT,Int}
+    domains::Vector{ValueT}
+    index::Dict{ValueT,Int}
 
-    function NodeHeader(level::LevelT, domain::DomainT)
-        new(level, level, domain, Symbol(level), [i for i = 1:domain], Dict([i => i for i = 1:domain]...))
+    function NodeHeader(level::LevelT, domain::ValueT)
+        NodeHeader(NodeID(level), level, Symbol(level), [i for i = 1:domain])
     end
 
-    function NodeHeader(level::LevelT, label::Symbol, domain::Vector{DomainT})
-        new(level, level, length(domain), label, domain, Dict([x => i for (i,x) = enumerate(domain)]...))
+    function NodeHeader(id::NodeID, level::LevelT, label::Symbol, domains::Vector{ValueT})
+        new(id, level, label, domains, Dict([x => i for (i,x) = enumerate(domains)]...))
     end
 end
 
 mutable struct Node <: AbstractNode
+    b::MDDForest
     id::NodeID
     header::NodeHeader
     nodes::Vector{AbstractNode}
@@ -129,7 +150,7 @@ mutable struct Node <: AbstractNode
         key = (h.id, [x.id for x = nodes])
         get(b.utable, key) do
             id = _get_next!(b.mgr)
-            b.utable[key] = new(id, h, nodes)
+            b.utable[key] = new(b, id, h, nodes)
         end
     end
 end
@@ -146,6 +167,7 @@ function _issame(nodes::Vector{AbstractNode})
 end
 
 struct Terminal{Tv} <: AbstractTerminal
+    b::MDDForest
     id::NodeID
     value::Tv
 end
@@ -153,7 +175,7 @@ end
 function Terminal(b::MDDForest, value::ValueT)
     get(b.vtable, value) do
         id = _get_next!(b.mgr)
-        b.vtable[value] = Terminal{ValueT}(id, value)
+        b.vtable[value] = Terminal{ValueT}(b, id, value)
     end
 end
 
@@ -165,15 +187,15 @@ function Terminal(b::MDDForest, value::Bool)
     end
 end
 
-function Terminal(b::MDDForest, value::Symbol)
-    if value == :None
-        b.undetermined
-    elseif value == :Union
-        b.union
-    else
-        throw(ErrorException("Specaial Symbols are None or Union."))
-    end
+function Terminal(b::MDDForest)
+    b.undetermined
 end
+
+function getdd(f::AbstractNode)
+    f.b
+end
+
+Base.issetequal(x::AbstractNode, y::AbstractNode) = x.id == y.id
 
 """
 uniapply
@@ -186,9 +208,9 @@ function apply!(b::MDDForest, op::AbstractOperator, f::AbstractNode)
 end
 
 function _apply!(b::MDDForest, op::AbstractOperator, f::Node)
-    key = (op, f.id, 0)
+    key = (op, f.id, b.zero.id)
     get(b.cache, key) do
-        nodes = AbstractNode[_apply!(b, op, f.nodes[i]) for i = 1:f.header.domain]
+        nodes = AbstractNode[_apply!(b, op, f.nodes[i]) for i = eachindex(f.header.domains)]
         ans = Node(b, f.header, nodes)
         b.cache[key] = ans
     end
@@ -212,13 +234,13 @@ function _apply!(b::MDDForest, op::AbstractOperator, f::Node, g::Node)
     key = (op, f.id, g.id)
     get(b.cache, key) do
         if f.header.level > g.header.level
-            nodes = AbstractNode[_apply!(b, op, f.nodes[i], g) for i = 1:f.header.domain]
+            nodes = AbstractNode[_apply!(b, op, f.nodes[i], g) for i = eachindex(f.header.domains)]
             ans = Node(b, f.header, nodes)
         elseif f.header.level < g.header.level
-            nodes = AbstractNode[_apply!(b, op, f, g.nodes[i]) for i = 1:g.header.domain]
+            nodes = AbstractNode[_apply!(b, op, f, g.nodes[i]) for i = eachindex(g.header.domains)]
             ans = Node(b, g.header, nodes)
         else
-            nodes = AbstractNode[_apply!(b, op, f.nodes[i], g.nodes[i]) for i = 1:f.header.domain]
+            nodes = AbstractNode[_apply!(b, op, f.nodes[i], g.nodes[i]) for i = eachindex(f.header.domains)]
             ans = Node(b, f.header, nodes)
         end
         b.cache[key] = ans
@@ -228,7 +250,7 @@ end
 function _apply!(b::MDDForest, op::AbstractOperator, f::AbstractTerminal, g::Node)
     key = (op, f.id, g.id)
     get(b.cache, key) do
-        nodes = AbstractNode[_apply!(b, op, f, g.nodes[i]) for i = 1:g.header.domain]
+        nodes = AbstractNode[_apply!(b, op, f, g.nodes[i]) for i = eachindex(g.header.domains)]
         ans = Node(b, g.header, nodes)
         b.cache[key] = ans
     end
@@ -237,7 +259,7 @@ end
 function _apply!(b::MDDForest, op::AbstractOperator, f::Node, g::AbstractTerminal)
     key = (op, f.id, g.id)
     get(b.cache, key) do
-        nodes = AbstractNode[_apply!(b, op, f.nodes[i], g) for i = 1:f.header.domain]
+        nodes = AbstractNode[_apply!(b, op, f.nodes[i], g) for i = eachindex(f.header.domains)]
         ans = Node(b, f.header, nodes)
         b.cache[key] = ans
     end
@@ -441,346 +463,80 @@ Return a string for dot to draw a diagram.
 
 function todot(b::MDDForest, f::AbstractNode)
     io = IOBuffer()
-    visited = Set{AbstractNode}()
+    visited = Set{NodeID}()
     println(io, "digraph { layout=dot; overlap=false; splines=true; node [fontsize=10];")
     _todot!(b, f, visited, io)
     println(io, "}")
     String(take!(io))
 end
 
-function _todot!(b::MDDForest, f::AbstractTerminal, visited::Set{AbstractNode}, io::IO)
-    if in(f, visited)
+function _todot!(b::MDDForest, f::AbstractTerminal, visited::Set{NodeID}, io::IO)
+    if in(f.id, visited)
         return
     end
     println(io, "\"obj$(f.id)\" [shape = square, label = \"$(f.value)\"];")
-    push!(visited, f)
+    push!(visited, f.id)
     nothing
 end
 
-function _todot!(b::MDDForest, f::Node, visited::Set{AbstractNode}, io::IO)
-    if in(f, visited)
+function _todot!(b::MDDForest, f::Node, visited::Set{NodeID}, io::IO)
+    if in(f.id, visited)
         return
     end
     println(io, "\"obj$(f.id)\" [shape = circle, label = \"$(f.header.label)\"];")
-    for (i,x) = enumerate(f.header.domainLabels)
-        if f.nodes[i] != b.undetermined
+    for (i,x) = enumerate(f.header.domains)
+        if f.nodes[i].id != b.undetermined.id
             _todot!(b, f.nodes[i], visited, io)
             println(io, "\"obj$(f.id)\" -> \"obj$(f.nodes[i].id)\" [label = \"$(x)\"];")
         end
     end
-    push!(visited, f)
+    push!(visited, f.id)
     nothing
 end
 
-"""
-prob(forest, f)
-"""
+### utilities
 
-function prob(b::MDDForest, f::AbstractNode, pr::Dict{NodeHeader,Vector{Float64}}, value::Tv) where Tv
-    cache = Dict{AbstractNode,Float64}()
-    _prob!(b, f, pr, cache, value)
+mdd() = MDDForest()
+
+function var!(b::MDDForest, name::Symbol, level::LevelT, domains::AbstractVector{ValueT})
+    h = NodeHeader(_get_next!(b.hmgr), level, name, collect(domains))
+    Node(b, h, AbstractNode[Terminal(b, x) for x = domains])
 end
 
-function _prob!(b::MDDForest, f::AbstractTerminal, pr::Dict{NodeHeader,Vector{Float64}}, cache::Dict{AbstractNode,Float64}, value::Tv) where Tv
-    f.value == value && return 1.0
-    return 0.0
-end
+lt!(b::MDDForest, f::AbstractNode, g::AbstractNode) = apply!(b, MDDLt(), f, g)
+lte!(b::MDDForest, f::AbstractNode, g::AbstractNode) = apply!(b, MDDLte(), f, g)
+gt!(b::MDDForest, f::AbstractNode, g::AbstractNode) = apply!(b, MDDGt(), f, g)
+gte!(b::MDDForest, f::AbstractNode, g::AbstractNode) = apply!(b, MDDGte(), f, g)
+eq!(b::MDDForest, f::AbstractNode, g::AbstractNode) = apply!(b, MDDEq(), f, g)
+neq!(b::MDDForest, f::AbstractNode, g::AbstractNode) = apply!(b, MDDNeq(), f, g)
 
-function _prob!(b::MDDForest, f::Node, pr::Dict{NodeHeader,Vector{Float64}}, cache::Dict{AbstractNode,Float64}, value::Tv) where Tv
-    get(cache, f) do
-        res = 0.0
-        fv = pr[f.header]
-        for i = 1:f.header.domain
-            res += fv[i] * _prob!(b, f.nodes[i], pr, cache, value)
-        end
-        cache[f] = res
+function and!(b::MDDForest, x::AbstractNode, xs...)
+    tmp = x
+    for u = xs
+        tmp = apply!(b, MDDAnd(), tmp, u)
     end
+    tmp
 end
 
-"""
-getbounds(forest, f, lower, upper)
-"""
-
-function getbounds(b::MDDForest, f::AbstractNode, lower::Vector{ValueT}, upper::Vector{ValueT})
-    cache = Dict()
-    _getbounds!(b, f, lower, upper, cache)
-end
-
-function _getbounds!(b::MDDForest, f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
-    [f.value, f.value]
-end
-
-function _getbounds!(b::MDDForest, f::Terminal{Undetermined}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
-    [Undetermined(), Undetermined()]
-end
-
-function _getbounds!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, cache)
-    get(cache, f) do
-        m = Any[Undetermined(), Undetermined()]
-        for i = f.header.index[lower[f.header.level]]:f.header.index[upper[f.header.level]]
-            lres, ures = _getbounds!(b, f.nodes[i], lower, upper, cache)
-            if lres != Undetermined() && (m[1] == Undetermined() || lres < m[1])
-                m[1] = lres
-            end
-            if ures != Undetermined() && (m[2] == Undetermined() || ures > m[2])
-                m[2] = ures
-            end
-        end
-        cache[f] = m
+function or!(b::MDDForest, x::AbstractNode, xs...)
+    tmp = x
+    for u = xs
+        tmp = apply!(b, MDDOr(), tmp, u)
     end
+    tmp
 end
 
-"""
-getmaxbounds2(forest, f, lower, upper)
-"""
-
-function getmaxbounds2(b::MDDForest, f::AbstractNode, lower::Vector{ValueT}, upper::Vector{ValueT}, id)
-    cache = Dict()
-    _getmaxbounds2!(b, f, lower, upper, lower[id], upper[id], id, cache)
-    [min([x[1] for (_,x) = cache]...), max([x[2] for (_,x) = cache]...)]
+function and(x::AbstractNode, xs...)
+    b = getdd(x)
+    and!(b, x, xs...)
 end
 
-function _getmaxbounds2!(b::MDDForest, f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, x0, x1, id, cache)
-    m = get(cache, f) do
-        [x0 + f.value, x1 + f.value]
-    end
-    if x0 + f.value < m[1]
-        m[1] = x0 + f.value
-    end
-    if m[2] < x0 + f.value
-        m[2] = x0 + f.value
-    end
-    cache[f] = m
+function or(x::AbstractNode, xs...)
+    b = getdd(x)
+    or!(b, x, xs...)
 end
 
-function _getmaxbounds2!(b::MDDForest, f::Terminal{Undetermined}, ::Vector{ValueT}, ::Vector{ValueT}, x0, x1, id, cache)
-    nothing
-end
-
-function _getmaxbounds2!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, x0, x1, id, cache)
-    if f.header.level == id
-        for v = lower[f.header.level]:upper[f.header.level]
-            i = f.header.index[v]
-            _getmaxbounds2!(b, f.nodes[i], lower, upper, v, v, id, cache)
-        end
-    else
-        for v = lower[f.header.level]:upper[f.header.level]
-            i = f.header.index[v]
-            _getmaxbounds2!(b, f.nodes[i], lower, upper, x0, x1, id, cache)
-        end
-    end
-end
-
-##
-
-function getbounds3(b::MDDForest, f::AbstractNode, lower::Vector{ValueT}, upper::Vector{ValueT}, id)
-    result1 = []
-    result2 = []
-    _getidnode!(b, f, lower, upper, id, Set(), result1, result2)
-    # println(result1)
-    # println(result2)
-    if length(result1) == 0 && length(result2) == 0
-        [lower[id], upper[id]]
-    else
-        cache = Dict()
-        m = [65535, -1]
-        for x = result1
-            _getbounds3!(b, x, lower, upper, cache)
-            for v = lower[x.header.level]:upper[x.header.level]
-                i = x.header.index[v]
-                tmp = cache[x.nodes[i]]
-                if tmp[1] != Undetermined()
-                    m[1] = min(m[1], v + tmp[1])
-                    m[2] = max(m[2], v + tmp[2])
-                end
-            end
-            # println(todot(b, x))
-        end
-        # println("m", m)
-        for x = result2
-            tmp = _getbounds3!(b, x, lower, upper, cache)
-            if tmp[1] != Undetermined()
-                m[1] = min(m[1], lower[id] + tmp[1])
-                m[2] = max(m[2], upper[id] + tmp[2])
-            end
-        end
-    end
-    m
-end
-
-function _getidnode!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, id, visited, result1, result2)
-    if in(f, visited)
-        return
-    end
-    if f.header.level == id
-        push!(visited, f)
-        push!(result1, f)
-        return
-    end
-    if f.header.level < id
-        push!(visited, f)
-        push!(result2, f)
-        return
-    end
-    for v = lower[f.header.level]:upper[f.header.level]
-        i = f.header.index[v]
-        _getidnode!(b, f.nodes[i], lower, upper, id, visited, result1, result2)
-        push!(visited, f)
-    end
-end
-
-function _getidnode!(b::MDDForest, f::Terminal{ValueT}, lower::Vector{ValueT}, upper::Vector{ValueT}, id, visited, result1, result2)
-    if in(f, visited)
-        return
-    end
-    push!(visited, f)
-    push!(result2, f)
-end
-
-function _getidnode!(b::MDDForest, f::Terminal{Undetermined}, lower::Vector{ValueT}, upper::Vector{ValueT}, id, visited, result1, result2)
-    return
-end
-
-function _getbounds3!(b::MDDForest, f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
-    get(cache, f) do
-        cache[f] = [f.value, f.value]
-    end
-end
-
-function _getbounds3!(b::MDDForest, f::Terminal{Undetermined}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
-    get(cache, f) do
-        cache[f] = [Undetermined(), Undetermined()]
-    end
-end
-
-function _getbounds3!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, cache)
-    get(cache, f) do
-        m = Any[Undetermined(), Undetermined()]
-        for i = f.header.index[lower[f.header.level]]:f.header.index[upper[f.header.level]]
-            lres, ures = _getbounds3!(b, f.nodes[i], lower, upper, cache)
-            if lres != Undetermined() && (m[1] == Undetermined() || lres < m[1])
-                m[1] = lres
-            end
-            if ures != Undetermined() && (m[2] == Undetermined() || ures > m[2])
-                m[2] = ures
-            end
-        end
-        cache[f] = m
-    end
-end
-
-
-    # function _getbounds3!(b::MDDForest, f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, x0, x1, cache)
-#     [f.value, f.value, x0, x1]
-# end
-
-# function _getbounds3!(b::MDDForest, f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, x0, x1, cache)
-#     [f.value, f.value, x0, x1]
-# end
-
-# function _getbounds3!(b::MDDForest, f::Terminal{Undetermined}, ::Vector{ValueT}, ::Vector{ValueT}, x0, x1, cache)
-#     [Undetermined(), Undetermined(), x0, x1]
-# end
-
-# function _getbounds3!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, x0, x1, cache)
-#     v = get(cache, f) do
-#         m = Any[Undetermined(), Undetermined()]
-#         for v = lower[f.header.level]:upper[f.header.level]
-#             i = f.header.index[v]
-#             lres, ures = _getbounds!(b, f.nodes[i], lower, upper, cache)
-#             if lres != Undetermined() && (m[1] == Undetermined() || lres < m[1])
-#                 m[1] = lres
-#             end
-#             if ures != Undetermined() && (m[2] == Undetermined() || ures > m[2])
-#                 m[2] = ures
-#             end
-#         end
-#         cache[f] = m
-#     end
-# end
-
-##
-
-function getminbounds2(b::MDDForest, f::AbstractNode, lower::Vector{ValueT}, upper::Vector{ValueT}, id)
-    cache = Dict()
-    _getminbounds2!(b, f, lower, upper, lower[id], upper[id], id, cache)
-end
-
-function _getminbounds2!(b::MDDForest, f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, x, m, id, cache)
-    if x + f.value < m
-        x + f.value
-    else
-        m
-    end
-end
-
-function _getminbounds2!(b::MDDForest, f::Terminal{Undetermined}, ::Vector{ValueT}, ::Vector{ValueT}, x, m, id, cache)
-    m
-end
-
-function _getminbounds2!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, x, m, id, cache)
-    if f.header.level == id
-        minvalue = m
-        for v = lower[f.header.level]:upper[f.header.level]
-            i = f.header.index[v]
-            tmp = _getminbounds2!(b, f.nodes[i], lower, upper, v, minvalue, id, cache)
-            if tmp < minvalue
-                minvalue = tmp
-            end
-        end
-        minvalue
-    else
-        minvalue = m
-        for v = lower[f.header.level]:upper[f.header.level]
-            i = f.header.index[v]
-            tmp = _getminbounds2!(b, f.nodes[i], lower, upper, x, minvalue, id, cache)
-            if tmp < minvalue
-                minvalue = tmp
-            end
-        end
-        minvalue
-    end
-end
-
-function getbounds2(b::MDDForest, f::AbstractNode, lower::Vector{ValueT}, upper::Vector{ValueT}, id)
-    getmaxbounds2(b, f, lower, upper, id)
-    # cache = Dict()
-    # (_getminbounds2!(b, f, lower, upper, lower[id], upper[id], id, cache), _getmaxbounds2!(b, f, lower, upper, upper[id], lower[id], id, cache))
-end
-
-### operations
-
-function lt!(b::MDDForest, f::AbstractNode, g::AbstractNode)
-    apply!(b, MDDLt(), f, g)
-end
-
-function lte!(b::MDDForest, f::AbstractNode, g::AbstractNode)
-    apply!(b, MDDLte(), f, g)
-end
-
-function gt!(b::MDDForest, f::AbstractNode, g::AbstractNode)
-    apply!(b, MDDGt(), f, g)
-end
-
-function gte!(b::MDDForest, f::AbstractNode, g::AbstractNode)
-    apply!(b, MDDGte(), f, g)
-end
-
-function eq!(b::MDDForest, f::AbstractNode, g::AbstractNode)
-    apply!(b, MDDEq(), f, g)
-end
-
-function neq!(b::MDDForest, f::AbstractNode, g::AbstractNode)
-    apply!(b, MDDNeq(), f, g)
-end
-
-function and!(b::MDDForest, f::AbstractNode, g::AbstractNode)
-    apply!(b, MDDAnd(), f, g)
-end
-
-function or!(b::MDDForest, f::AbstractNode, g::AbstractNode)
-    apply!(b, MDDOr(), f, g)
-end
+not!(b::MDDForest, f::AbstractNode) = apply!(b, MDDNot(), f)
 
 function ifelse!(b::MDDForest, f::AbstractNode, g::AbstractNode, h::AbstractNode)
     tmp1 = apply!(b, MDDIf(), f, g)
@@ -788,54 +544,74 @@ function ifelse!(b::MDDForest, f::AbstractNode, g::AbstractNode, h::AbstractNode
     apply!(b, MDDUnion(), tmp1, tmp2)
 end
 
-function match!(b::MDDForest, args::Vararg{Tuple{AbstractNode,AbstractNode}})
-    tmp = default
-    for x = reverse(args)
-        tmp = ifelse!(x[1], x[2], tmp)
-    end
-    tmp
-end
+# function match!(b::MDDForest, args::Vararg{Tuple{AbstractNode,AbstractNode}})
+#     tmp = default
+#     for x = reverse(args)
+#         tmp = ifelse!(x[1], x[2], tmp)
+#     end
+#     tmp
+# end
 
-function max!(b::MDDForest, args...)
-    tmp = args[1]
-    for u = args[2:end]
+function max!(b::MDDForest, x::AbstractNode, xs...)
+    tmp = x
+    for u = xs
         tmp = apply!(b, MDDMax(), tmp, u)
     end
     tmp
 end
 
-function min!(b::MDDForest, args...)
-    tmp = args[1]
-    for u = args[2:end]
+function min!(b::MDDForest, x::AbstractNode, xs...)
+    tmp = x
+    for u = xs
         tmp = apply!(b, MDDMin(), tmp, u)
     end
     tmp
 end
 
-function plus!(b::MDDForest, args...)
-    tmp = args[1]
-    for u = args[2:end]
+function plus!(b::MDDForest, x::AbstractNode, xs...)
+    tmp = x
+    for u = xs
         tmp = apply!(b, MDDPlus(), tmp, u)
     end
     tmp
 end
 
-function minus!(b::MDDForest, args...)
-    tmp = args[1]
-    for u = args[2:end]
-        tmp = apply!(b, MDDMinus(), tmp, u)
-    end
-    tmp
-end
+minus!(b::MDDForest, f::AbstractNode, g::AbstractNode) = apply!(b, MDDMinus(), f, g)
 
-function mul!(b::MDDForest, args...)
-    tmp = args[1]
-    for u = args[2:end]
+function mul!(b::MDDForest, x::AbstractNode, xs...)
+    tmp = x
+    for u = xs
         tmp = apply!(b, MDDMul(), tmp, u)
     end
     tmp
 end
 
-include("_mss.jl")
+ops = [:(<), :(<=), :(>), :(>=), :(==), :(!=), :(+), :(-), :(*), :(max), :(min)]
+fns = [:lt!, :lte!, :gt!, :gte!, :eq!, :neq!, :plus!, :minus!, :mul!, :max!, :min!]
+
+for (op, fn) = zip(ops, fns)
+    @eval Base.$op(x::AbstractNode, y::AbstractNode) = $fn(getdd(x), x, y)
+    @eval Base.$op(x::AbstractNode, y::ValueT) = $fn(getdd(x), x, Terminal(getdd(x), y))
+    @eval Base.$op(x::ValueT, y::AbstractNode) = $fn(getdd(y), Terminal(getdd(y), x), y)
+    @eval Base.$op(x::AbstractNode, y::Bool) = $fn(getdd(x), x, Terminal(getdd(x), y))
+    @eval Base.$op(x::Bool, y::AbstractNode) = $fn(getdd(y), Terminal(getdd(y), x), y)
+    @eval Base.$op(x::AbstractNode, y::Nothing) = $fn(getdd(x), x, Terminal(getdd(x)))
+    @eval Base.$op(x::Nothing, y::AbstractNode) = $fn(getdd(y), Terminal(getdd(y)), y)
+end
+
+# ops = [:and, :or]
+# fns = [:and!, :or!]
+
+# for (op, fn) = zip(ops, fns)
+#     @eval $op(x::AbstractNode, xs...) = $fn(getdd(x), x, xs)
+#     @eval $op(x::AbstractNode, y::Bool) = $fn(getdd(x), x, Terminal(getdd(x), y))
+#     @eval $op(x::Bool, y::AbstractNode) = $fn(getdd(y), Terminal(getdd(y), x), y)
+#     @eval $op(x::AbstractNode, y::Nothing) = $fn(getdd(x), x, Terminal(getdd(x)))
+#     @eval $op(x::Nothing, y::AbstractNode) = $fn(getdd(y), Terminal(getdd(y)), y)
+# end
+
+Base.:(!)(x::AbstractNode) = not!(getdd(x), x)
+Base.:(-)(x::AbstractNode) = minus!(getdd(x), Terminal(getdd(x), 0), x)
+todot(f::AbstractNode) = todot(getdd(f), f)
 
 end

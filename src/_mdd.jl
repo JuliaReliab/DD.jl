@@ -536,44 +536,168 @@ getmaxbounds2(forest, f, lower, upper)
 
 function getmaxbounds2(b::MDDForest, f::AbstractNode, lower::Vector{ValueT}, upper::Vector{ValueT}, id)
     cache = Dict()
-    _getmaxbounds2!(b, f, lower, upper, upper[id], lower[id], id, cache)
+    _getmaxbounds2!(b, f, lower, upper, lower[id], upper[id], id, cache)
+    [min([x[1] for (_,x) = cache]...), max([x[2] for (_,x) = cache]...)]
 end
 
-function _getmaxbounds2!(b::MDDForest, f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, x, m, id, cache)
-    if x + f.value > m
-        x + f.value
+function _getmaxbounds2!(b::MDDForest, f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, x0, x1, id, cache)
+    m = get(cache, f) do
+        [x0 + f.value, x1 + f.value]
+    end
+    if x0 + f.value < m[1]
+        m[1] = x0 + f.value
+    end
+    if m[2] < x0 + f.value
+        m[2] = x0 + f.value
+    end
+    cache[f] = m
+end
+
+function _getmaxbounds2!(b::MDDForest, f::Terminal{Undetermined}, ::Vector{ValueT}, ::Vector{ValueT}, x0, x1, id, cache)
+    nothing
+end
+
+function _getmaxbounds2!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, x0, x1, id, cache)
+    if f.header.level == id
+        for v = lower[f.header.level]:upper[f.header.level]
+            i = f.header.index[v]
+            _getmaxbounds2!(b, f.nodes[i], lower, upper, v, v, id, cache)
+        end
     else
-        m
+        for v = lower[f.header.level]:upper[f.header.level]
+            i = f.header.index[v]
+            _getmaxbounds2!(b, f.nodes[i], lower, upper, x0, x1, id, cache)
+        end
     end
 end
 
-function _getmaxbounds2!(b::MDDForest, f::Terminal{Undetermined}, ::Vector{ValueT}, ::Vector{ValueT}, x, m, id, cache)
+##
+
+function getbounds3(b::MDDForest, f::AbstractNode, lower::Vector{ValueT}, upper::Vector{ValueT}, id)
+    result1 = []
+    result2 = []
+    _getidnode!(b, f, lower, upper, id, Set(), result1, result2)
+    # println(result1)
+    # println(result2)
+    if length(result1) == 0 && length(result2) == 0
+        [lower[id], upper[id]]
+    else
+        cache = Dict()
+        m = [65535, -1]
+        for x = result1
+            _getbounds3!(b, x, lower, upper, cache)
+            for v = lower[x.header.level]:upper[x.header.level]
+                i = x.header.index[v]
+                tmp = cache[x.nodes[i]]
+                if tmp[1] != Undetermined()
+                    m[1] = min(m[1], v + tmp[1])
+                    m[2] = max(m[2], v + tmp[2])
+                end
+            end
+            # println(todot(b, x))
+        end
+        # println("m", m)
+        for x = result2
+            tmp = _getbounds3!(b, x, lower, upper, cache)
+            if tmp[1] != Undetermined()
+                m[1] = min(m[1], lower[id] + tmp[1])
+                m[2] = max(m[2], upper[id] + tmp[2])
+            end
+        end
+    end
     m
 end
 
-function _getmaxbounds2!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, x, m, id, cache)
+function _getidnode!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, id, visited, result1, result2)
+    if in(f, visited)
+        return
+    end
     if f.header.level == id
-        maxvalue = m
-        for v = lower[f.header.level]:upper[f.header.level]
-            i = f.header.index[v]
-            tmp = _getmaxbounds2!(b, f.nodes[i], lower, upper, v, maxvalue, id, cache)
-            if tmp > maxvalue
-                maxvalue = tmp
-            end
-        end
-        maxvalue
-    else
-        maxvalue = m
-        for v = lower[f.header.level]:upper[f.header.level]
-            i = f.header.index[v]
-            tmp = _getmaxbounds2!(b, f.nodes[i], lower, upper, x, maxvalue, id, cache)
-            if tmp > maxvalue
-                maxvalue = tmp
-            end
-        end
-        maxvalue
+        push!(visited, f)
+        push!(result1, f)
+        return
+    end
+    if f.header.level < id
+        push!(visited, f)
+        push!(result2, f)
+        return
+    end
+    for v = lower[f.header.level]:upper[f.header.level]
+        i = f.header.index[v]
+        _getidnode!(b, f.nodes[i], lower, upper, id, visited, result1, result2)
+        push!(visited, f)
     end
 end
+
+function _getidnode!(b::MDDForest, f::Terminal{ValueT}, lower::Vector{ValueT}, upper::Vector{ValueT}, id, visited, result1, result2)
+    if in(f, visited)
+        return
+    end
+    push!(visited, f)
+    push!(result2, f)
+end
+
+function _getidnode!(b::MDDForest, f::Terminal{Undetermined}, lower::Vector{ValueT}, upper::Vector{ValueT}, id, visited, result1, result2)
+    return
+end
+
+function _getbounds3!(b::MDDForest, f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
+    get(cache, f) do
+        cache[f] = [f.value, f.value]
+    end
+end
+
+function _getbounds3!(b::MDDForest, f::Terminal{Undetermined}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
+    get(cache, f) do
+        cache[f] = [Undetermined(), Undetermined()]
+    end
+end
+
+function _getbounds3!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, cache)
+    get(cache, f) do
+        m = Any[Undetermined(), Undetermined()]
+        for i = f.header.index[lower[f.header.level]]:f.header.index[upper[f.header.level]]
+            lres, ures = _getbounds3!(b, f.nodes[i], lower, upper, cache)
+            if lres != Undetermined() && (m[1] == Undetermined() || lres < m[1])
+                m[1] = lres
+            end
+            if ures != Undetermined() && (m[2] == Undetermined() || ures > m[2])
+                m[2] = ures
+            end
+        end
+        cache[f] = m
+    end
+end
+
+
+    # function _getbounds3!(b::MDDForest, f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, x0, x1, cache)
+#     [f.value, f.value, x0, x1]
+# end
+
+# function _getbounds3!(b::MDDForest, f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, x0, x1, cache)
+#     [f.value, f.value, x0, x1]
+# end
+
+# function _getbounds3!(b::MDDForest, f::Terminal{Undetermined}, ::Vector{ValueT}, ::Vector{ValueT}, x0, x1, cache)
+#     [Undetermined(), Undetermined(), x0, x1]
+# end
+
+# function _getbounds3!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, x0, x1, cache)
+#     v = get(cache, f) do
+#         m = Any[Undetermined(), Undetermined()]
+#         for v = lower[f.header.level]:upper[f.header.level]
+#             i = f.header.index[v]
+#             lres, ures = _getbounds!(b, f.nodes[i], lower, upper, cache)
+#             if lres != Undetermined() && (m[1] == Undetermined() || lres < m[1])
+#                 m[1] = lres
+#             end
+#             if ures != Undetermined() && (m[2] == Undetermined() || ures > m[2])
+#                 m[2] = ures
+#             end
+#         end
+#         cache[f] = m
+#     end
+# end
 
 ##
 
@@ -619,8 +743,9 @@ function _getminbounds2!(b::MDDForest, f::Node, lower::Vector{ValueT}, upper::Ve
 end
 
 function getbounds2(b::MDDForest, f::AbstractNode, lower::Vector{ValueT}, upper::Vector{ValueT}, id)
-    cache = Dict()
-    (_getminbounds2!(b, f, lower, upper, lower[id], upper[id], id, cache), _getmaxbounds2!(b, f, lower, upper, upper[id], lower[id], id, cache))
+    getmaxbounds2(b, f, lower, upper, id)
+    # cache = Dict()
+    # (_getminbounds2!(b, f, lower, upper, lower[id], upper[id], id, cache), _getmaxbounds2!(b, f, lower, upper, upper[id], lower[id], id, cache))
 end
 
 ### operations

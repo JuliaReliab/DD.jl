@@ -1,6 +1,6 @@
 import DD.MDD: MDDForest, NodeHeader, Terminal, Node, AbstractNode, todot, apply!, MDDMin, MDDMax
 import DD.MDD: MSSVariable, MSS, var!, val!, gte!, lt!, gt!, lte!, eq!, neq!, ifelse!, and!, or!, max!, min!, plus!, minus!, mul!, prob, @mss, ValueT
-import DD.MDD: MDDIf, MDDElse, getbounds, getmaxbounds2, getminbounds2, getbounds2
+import DD.MDD: MDDIf, MDDElse, getbounds, getmaxbounds2, getminbounds2, getbounds2, getbounds3
 using Random
 
 @testset "MDD1" begin
@@ -302,7 +302,7 @@ end
 
 @testset "MSS12" begin
     mss = MSS()
-    n = 5
+    n = 50
     nn = Terminal(mss.dd, n)
     x = [var!(mss, Symbol(:x, i), 0:n) for i = 1:6]
     t1 = var!(mss, :t1, 1:6)
@@ -418,7 +418,7 @@ end
         println(lower, upper)
     end
     @time begin
-        for k = 1:1000
+        for k = 1:100
             event = [rand(rng, 1:6),rand(rng, 1:6)]
             l = cat(lower, event, dims=1)
             u = cat(upper, event, dims=1)
@@ -439,7 +439,7 @@ end
 
 @testset "MSS13" begin
     mss = MSS()
-    n = 5
+    n = 50
     nn = Terminal(mss.dd, n)
     x = [var!(mss, Symbol(:x, i), 0:n) for i = 1:6]
     x0 = x
@@ -589,10 +589,10 @@ end
     # end
 
     # TODO: getbounds2 is wrong
-    @time begin
-        v = getbounds2(mss.dd, x6dash, [0,0,0,0,0,0,6,1], [n,n,n,n,n,n,6,1], 6)
-        println(v)
-    end
+    # @time begin
+    #     v = getbounds3(mss.dd, x6dash, [0,0,0,0,0,0,6,1], [n,n,n,n,n,n,6,1], 6)
+    #     println(v)
+    # end
 
     rng = MersenneTwister(1234)
     lower = [0, 0, 0, 0, 0, 0]
@@ -602,12 +602,12 @@ end
         println(event)
         l = cat(lower, event, dims=1)
         u = cat(upper, event, dims=1)
-        v1 = getbounds2(mss.dd, x1dash, l, u, 1)
-        v2 = getbounds2(mss.dd, x2dash, l, u, 2)
-        v3 = getbounds2(mss.dd, x3dash, l, u, 3)
-        v4 = getbounds2(mss.dd, x4dash, l, u, 4)
-        v5 = getbounds2(mss.dd, x5dash, l, u, 5)
-        v6 = getbounds2(mss.dd, x6dash, l, u, 6)
+        v1 = getbounds3(mss.dd, x1dash, l, u, 1)
+        v2 = getbounds3(mss.dd, x2dash, l, u, 2)
+        v3 = getbounds3(mss.dd, x3dash, l, u, 3)
+        v4 = getbounds3(mss.dd, x4dash, l, u, 4)
+        v5 = getbounds3(mss.dd, x5dash, l, u, 5)
+        v6 = getbounds3(mss.dd, x6dash, l, u, 6)
         for (i,x) = enumerate([v1, v2, v3, v4, v5, v6])
             lower[i] = x[1]
             upper[i] = x[2]
@@ -615,16 +615,16 @@ end
         println(lower, upper)
     end
     @time begin
-        for k = 1:1000
+        for k = 1:100
             event = [rand(rng, 1:6),rand(rng, 1:6)]
             l = cat(lower, event, dims=1)
             u = cat(upper, event, dims=1)
-            v1 = getbounds2(mss.dd, x1dash, l, u, 1)
-            v2 = getbounds2(mss.dd, x2dash, l, u, 2)
-            v3 = getbounds2(mss.dd, x3dash, l, u, 3)
-            v4 = getbounds2(mss.dd, x4dash, l, u, 4)
-            v5 = getbounds2(mss.dd, x5dash, l, u, 5)
-            v6 = getbounds2(mss.dd, x6dash, l, u, 6)
+            v1 = getbounds3(mss.dd, x1dash, l, u, 1)
+            v2 = getbounds3(mss.dd, x2dash, l, u, 2)
+            v3 = getbounds3(mss.dd, x3dash, l, u, 3)
+            v4 = getbounds3(mss.dd, x4dash, l, u, 4)
+            v5 = getbounds3(mss.dd, x5dash, l, u, 5)
+            v6 = getbounds3(mss.dd, x6dash, l, u, 6)
             for (i,x) = enumerate([v1, v2, v3, v4, v5, v6])
                 lower[i] = x[1]
                 upper[i] = x[2]

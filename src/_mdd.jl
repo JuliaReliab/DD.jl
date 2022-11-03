@@ -25,6 +25,8 @@ export
     or!,
     not!,
     todot,
+    ifelse!,
+    ifelse,
     mdd
 
 """
@@ -187,7 +189,7 @@ function Terminal(b::MDDForest, value::Bool)
     end
 end
 
-function Terminal(b::MDDForest)
+function Terminal(b::MDDForest, value::Nothing)
     b.undetermined
 end
 
@@ -542,6 +544,49 @@ function ifelse!(b::MDDForest, f::AbstractNode, g::AbstractNode, h::AbstractNode
     tmp1 = apply!(b, MDDIf(), f, g)
     tmp2 = apply!(b, MDDElse(), f, h)
     apply!(b, MDDUnion(), tmp1, tmp2)
+end
+
+function ifelse(f::AbstractNode, g::AbstractNode, h::AbstractNode)
+    b = getdd(f)
+    ifelse!(b, f, g, h)
+end
+
+function ifelse(f::AbstractNode, g::Tx, h::AbstractNode) where Tx <: Union{ValueT,Nothing}
+    b = getdd(f)
+    ifelse!(b, f, Terminal(b, g), h)
+end
+
+function ifelse(f::AbstractNode, g::AbstractNode, h::Tx) where Tx <: Union{ValueT,Nothing}
+    b = getdd(f)
+    ifelse!(b, f, g, Terminal(b, h))
+end
+
+function ifelse(f::AbstractNode, g::Tx1, h::Tx2) where {Tx1 <: Union{ValueT,Nothing}, Tx2 <: Union{ValueT,Nothing}}
+    b = getdd(f)
+    ifelse!(b, f, Terminal(b, g), Terminal(b, h))
+end
+
+function ifelse(f::Bool, g::AbstractNode, h::AbstractNode)
+    b = getdd(g)
+    ifelse!(b, Terminal(b, f), g, h)
+end
+
+function ifelse(f::Bool, g::Tx, h::AbstractNode) where Tx <: Union{ValueT,Nothing}
+    b = getdd(h)
+    ifelse!(b, Terminal(b, f), Terminal(b, g), h)
+end
+
+function ifelse(f::Bool, g::AbstractNode, h::Tx) where Tx <: Union{ValueT,Nothing}
+    b = getdd(g)
+    ifelse!(b, Terminal(b, f), g, Terminal(b, h))
+end
+
+function ifelse(f::Bool, g::Tx1, h::Tx2) where {Tx1 <: Union{ValueT,Nothing}, Tx2 <: Union{ValueT,Nothing}}
+    if f
+        g
+    else
+        h
+    end
 end
 
 # function match!(b::MDDForest, args::Vararg{Tuple{AbstractNode,AbstractNode}})

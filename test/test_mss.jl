@@ -1,12 +1,12 @@
-import DD.MultiState: MSS, var!, mdd, prob
-import DD.MDD: todot, ifelse, @match, and, or
+import DD.MultiState: MSS, mssvar!, mdd, prob
+import DD.MDD: todot, ifthenelse, @match, and, or
 using Random
 
 @testset "MSS1" begin
     mss = MSS()
-    x1 = var!(mss, :x1, [0,1])
-    x2 = var!(mss, :x2, [0,1,2])
-    x3 = var!(mss, :x3, [0,1,2])
+    x1 = mssvar!(mss, :x1, [0,1])
+    x2 = mssvar!(mss, :x2, [0,1,2])
+    x3 = mssvar!(mss, :x3, [0,1,2])
 
     println(mss)
     println(mdd(mss))
@@ -14,9 +14,9 @@ end
 
 @testset "MSS2" begin
     mss = MSS()
-    x1 = var!(mss, :x1, [0,1])
-    x2 = var!(mss, :x2, [0,1,2])
-    x3 = var!(mss, :x3, [0,1,2])
+    x1 = mssvar!(mss, :x1, [0,1])
+    x2 = mssvar!(mss, :x2, [0,1,2])
+    x3 = mssvar!(mss, :x3, [0,1,2])
 
     x = x2 >= 1
     println(todot(x))
@@ -24,20 +24,20 @@ end
 
 @testset "MSS3" begin
     mss = MSS()
-    x1 = var!(mss, :x1, [0,1])
-    x2 = var!(mss, :x2, [0,1,2])
-    x3 = var!(mss, :x3, [0,1,2])
+    x1 = mssvar!(mss, :x1, [0,1])
+    x2 = mssvar!(mss, :x2, [0,1,2])
+    x3 = mssvar!(mss, :x3, [0,1,2])
 
     x = x1 >= 1
-    x = ifelse(x, 2, 3)
+    x = ifthenelse(x, 2, 3)
     println(todot(x))
 end
 
 @testset "MSS6" begin
     mss = MSS()
-    x1 = var!(mss, :x1, [0,1])
-    x2 = var!(mss, :x2, [0,1,2])
-    x3 = var!(mss, :x3, [0,1,2])
+    x1 = mssvar!(mss, :x1, [0,1])
+    x2 = mssvar!(mss, :x2, [0,1,2])
+    x3 = mssvar!(mss, :x3, [0,1,2])
 
     x = @match(
         x1 == 0 => 0,
@@ -50,9 +50,9 @@ end
 
 @testset "MSS7" begin
     mss = MSS()
-    x3 = var!(mss, :x3, [0,1,2])
-    x2 = var!(mss, :x2, [0,1,2])
-    x1 = var!(mss, :x1, [0,1])
+    x3 = mssvar!(mss, :x3, [0,1,2])
+    x2 = mssvar!(mss, :x2, [0,1,2])
+    x1 = mssvar!(mss, :x1, [0,1])
 
     x = @match(
         x1 == 0 => 0,
@@ -71,9 +71,9 @@ end
 
 @testset "MSS8" begin
     mss = MSS()
-    x1 = var!(mss, :x1, [0,1])
-    x2 = var!(mss, :x2, [0,1])
-    x3 = var!(mss, :x3, [0,1,2])
+    x1 = mssvar!(mss, :x1, [0,1])
+    x2 = mssvar!(mss, :x2, [0,1])
+    x3 = mssvar!(mss, :x3, [0,1,2])
 
     s1 = @match(
         x1 == 1 || x2 == 1 => 1,
@@ -93,9 +93,9 @@ end
 
 @testset "MSS9" begin
     mss = MSS()
-    C = var!(mss, :C, [0,1,2])
-    B = var!(mss, :B, [0,1,2])
-    A = var!(mss, :A, [0,1])
+    C = mssvar!(mss, :C, [0,1,2])
+    B = mssvar!(mss, :B, [0,1,2])
+    A = mssvar!(mss, :A, [0,1])
 
     g1 = (x, y) -> @match(
         x == 0 => 0,
@@ -117,9 +117,9 @@ end
 
 @testset "MSS10" begin
     mss = MSS()
-    C = var!(mss, :C, [0,1,2])
-    B = var!(mss, :B, [0,1,2])
-    A = var!(mss, :A, [0,1])
+    C = mssvar!(mss, :C, [0,1,2])
+    B = mssvar!(mss, :B, [0,1,2])
+    A = mssvar!(mss, :A, [0,1])
 
     p = Dict([
         :A => [0.2, 0.8],

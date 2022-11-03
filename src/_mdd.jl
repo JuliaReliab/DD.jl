@@ -25,9 +25,10 @@ export
     or!,
     not!,
     todot,
-    ifelse!,
-    ifelse,
+    ifthenelse!,
+    ifthenelse,
     @match,
+    var!,
     mdd
 
 """
@@ -287,9 +288,6 @@ for op = [:MDDAnd, :MDDOr]
     @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Undetermined}, ::Terminal{Bool})
         b.undetermined
     end
-    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Bool}, ::Terminal{Undetermined})
-        b.undetermined
-    end
     @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Undetermined}, ::Terminal{Undetermined})
         b.undetermined
     end
@@ -541,48 +539,48 @@ end
 
 not!(b::MDDForest, f::AbstractNode) = apply!(b, MDDNot(), f)
 
-function ifelse!(b::MDDForest, f::AbstractNode, g::AbstractNode, h::AbstractNode)
+function ifthenelse!(b::MDDForest, f::AbstractNode, g::AbstractNode, h::AbstractNode)
     tmp1 = apply!(b, MDDIf(), f, g)
     tmp2 = apply!(b, MDDElse(), f, h)
     apply!(b, MDDUnion(), tmp1, tmp2)
 end
 
-function ifelse(f::AbstractNode, g::AbstractNode, h::AbstractNode)
+function ifthenelse(f::AbstractNode, g::AbstractNode, h::AbstractNode)
     b = getdd(f)
-    ifelse!(b, f, g, h)
+    ifthenelse!(b, f, g, h)
 end
 
-function ifelse(f::AbstractNode, g::Tx, h::AbstractNode) where Tx <: Union{ValueT,Nothing}
+function ifthenelse(f::AbstractNode, g::Tx, h::AbstractNode) where Tx <: Union{ValueT,Nothing}
     b = getdd(f)
-    ifelse!(b, f, Terminal(b, g), h)
+    ifthenelse!(b, f, Terminal(b, g), h)
 end
 
-function ifelse(f::AbstractNode, g::AbstractNode, h::Tx) where Tx <: Union{ValueT,Nothing}
+function ifthenelse(f::AbstractNode, g::AbstractNode, h::Tx) where Tx <: Union{ValueT,Nothing}
     b = getdd(f)
-    ifelse!(b, f, g, Terminal(b, h))
+    ifthenelse!(b, f, g, Terminal(b, h))
 end
 
-function ifelse(f::AbstractNode, g::Tx1, h::Tx2) where {Tx1 <: Union{ValueT,Nothing}, Tx2 <: Union{ValueT,Nothing}}
+function ifthenelse(f::AbstractNode, g::Tx1, h::Tx2) where {Tx1 <: Union{ValueT,Nothing}, Tx2 <: Union{ValueT,Nothing}}
     b = getdd(f)
-    ifelse!(b, f, Terminal(b, g), Terminal(b, h))
+    ifthenelse!(b, f, Terminal(b, g), Terminal(b, h))
 end
 
-function ifelse(f::Bool, g::AbstractNode, h::AbstractNode)
+function ifthenelse(f::Bool, g::AbstractNode, h::AbstractNode)
     b = getdd(g)
-    ifelse!(b, Terminal(b, f), g, h)
+    ifthenelse!(b, Terminal(b, f), g, h)
 end
 
-function ifelse(f::Bool, g::Tx, h::AbstractNode) where Tx <: Union{ValueT,Nothing}
+function ifthenelse(f::Bool, g::Tx, h::AbstractNode) where Tx <: Union{ValueT,Nothing}
     b = getdd(h)
-    ifelse!(b, Terminal(b, f), Terminal(b, g), h)
+    ifthenelse!(b, Terminal(b, f), Terminal(b, g), h)
 end
 
-function ifelse(f::Bool, g::AbstractNode, h::Tx) where Tx <: Union{ValueT,Nothing}
+function ifthenelse(f::Bool, g::AbstractNode, h::Tx) where Tx <: Union{ValueT,Nothing}
     b = getdd(g)
-    ifelse!(b, Terminal(b, f), g, Terminal(b, h))
+    ifthenelse!(b, Terminal(b, f), g, Terminal(b, h))
 end
 
-function ifelse(f::Bool, g::Tx1, h::Tx2) where {Tx1 <: Union{ValueT,Nothing}, Tx2 <: Union{ValueT,Nothing}}
+function ifthenelse(f::Bool, g::Tx1, h::Tx2) where {Tx1 <: Union{ValueT,Nothing}, Tx2 <: Union{ValueT,Nothing}}
     if f
         g
     else
@@ -593,7 +591,7 @@ end
 # function match!(b::MDDForest, args::Vararg{Tuple{AbstractNode,AbstractNode}})
 #     tmp = default
 #     for x = reverse(args)
-#         tmp = ifelse!(x[1], x[2], tmp)
+#         tmp = ifthenelse!(x[1], x[2], tmp)
 #     end
 #     tmp
 # end
@@ -691,7 +689,7 @@ function _match(v)
     if length(v) > 1
         x = v[1]
         if Meta.isexpr(x, :call) && x.args[1] == :(=>)
-            Expr(:call, :ifelse, _cond(x.args[2]), _cond(x.args[3]), _match(v[2:end]))
+            Expr(:call, :ifthenelse, _cond(x.args[2]), _cond(x.args[3]), _match(v[2:end]))
         else
             throw(ErrorException("Format error"))
         end
@@ -700,7 +698,7 @@ function _match(v)
         if Meta.isexpr(x, :call) && x.args[1] == :(=>) && x.args[2] == :(_)
             _cond(x.args[3])
         elseif Meta.isexpr(x, :call) && x.args[1] == :(=>)
-            Expr(:call, :ifelse, _cond(x.args[2]), _cond(x.args[3]), :nothing)
+            Expr(:call, :ifthenelse, _cond(x.args[2]), _cond(x.args[3]), :nothing)
         else
             throw(ErrorException("Format error"))
         end

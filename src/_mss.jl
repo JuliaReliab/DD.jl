@@ -4,7 +4,6 @@ MSS
 
 module MultiState
 
-# import ..MDD : MDDForest, AbstractTerminal, AbstractNode, mdd, ValueT, var!, NodeID
 import ..MDD
 
 """
@@ -22,13 +21,13 @@ mutable struct MSS
     end
 end
 
-function var!(mss::MSS, name::Symbol, domains::AbstractVector{MDD.ValueT})
+function mssvar!(mss::MSS, name::Symbol, domains::AbstractVector{MDD.ValueT})
     x = MDD.var!(mss.b, name, length(mss.vars)+1, domains)
     mss.vars[name] = x
     x
 end
 
-mdd(mss::MSS) = mss.b
+MDD.mdd(mss::MSS) = mss.b
 
 """
 prob(forest, f)

@@ -49,8 +49,6 @@ end
 type alias
 """
 
-struct Undetermined end
-
 const NodeID = UInt
 const LevelT = Int
 const ValueT = Int
@@ -115,7 +113,7 @@ mutable struct MDDForest
         b.vtable = Dict{ValueT,AbstractNode}()
         b.zero = Terminal{Bool}(b, _get_next!(b.mgr), false)
         b.one = Terminal{Bool}(b, _get_next!(b.mgr), true)
-        b.undetermined = Terminal{Undetermined}(b, _get_next!(b.mgr), Undetermined())
+        b.undetermined = Terminal{Nothing}(b, _get_next!(b.mgr), nothing)
         b.cache = Dict{Tuple{AbstractOperator,NodeID,NodeID},AbstractNode}()
         b
     end
@@ -270,25 +268,25 @@ function _apply!(b::MDDForest, op::AbstractOperator, f::Node, g::AbstractTermina
 end
 
 for op = [:MDDMin, :MDDMax, :MDDPlus, :MDDMinus, :MDDMul, :MDDLte, :MDDLt, :MDDGte, :MDDGt, :MDDEq, :MDDNeq]
-    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{ValueT}, ::Terminal{Undetermined})
+    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{ValueT}, ::Terminal{Nothing})
         b.undetermined
     end
-    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Undetermined}, ::Terminal{ValueT})
+    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Nothing}, ::Terminal{ValueT})
         b.undetermined
     end
-    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Undetermined}, ::Terminal{Undetermined})
+    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Nothing}, ::Terminal{Nothing})
         b.undetermined
     end
 end
 
 for op = [:MDDAnd, :MDDOr]
-    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Bool}, ::Terminal{Undetermined})
+    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Bool}, ::Terminal{Nothing})
         b.undetermined
     end
-    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Undetermined}, ::Terminal{Bool})
+    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Nothing}, ::Terminal{Bool})
         b.undetermined
     end
-    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Undetermined}, ::Terminal{Undetermined})
+    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Nothing}, ::Terminal{Nothing})
         b.undetermined
     end
 end
@@ -411,7 +409,7 @@ end
 
 ####### if
 
-function _apply!(b::MDDForest, ::MDDIf, f::Terminal{Bool}, g::Terminal{Tx}) where Tx <: Union{ValueT, Bool, Undetermined}
+function _apply!(b::MDDForest, ::MDDIf, f::Terminal{Bool}, g::Terminal{Tx}) where Tx <: Union{ValueT, Bool, Nothing}
     # assume f.value is bool, g.value is integer
     if f.value == true
         g
@@ -420,13 +418,13 @@ function _apply!(b::MDDForest, ::MDDIf, f::Terminal{Bool}, g::Terminal{Tx}) wher
     end
 end
 
-function _apply!(b::MDDForest, ::MDDIf, f::Terminal{Undetermined}, g::AbstractTerminal)
+function _apply!(b::MDDForest, ::MDDIf, f::Terminal{Nothing}, g::AbstractTerminal)
     b.undetermined
 end
 
 ## else
 
-function _apply!(b::MDDForest, ::MDDElse, f::Terminal{Bool}, g::Terminal{Tx}) where Tx <: Union{ValueT, Bool, Undetermined}
+function _apply!(b::MDDForest, ::MDDElse, f::Terminal{Bool}, g::Terminal{Tx}) where Tx <: Union{ValueT, Bool, Nothing}
     # assume f.value is bool, g.value is integer
     if f.value == false
         g
@@ -435,17 +433,17 @@ function _apply!(b::MDDForest, ::MDDElse, f::Terminal{Bool}, g::Terminal{Tx}) wh
     end
 end
 
-function _apply!(b::MDDForest, ::MDDElse, f::Terminal{Undetermined}, g::AbstractTerminal)
+function _apply!(b::MDDForest, ::MDDElse, f::Terminal{Nothing}, g::AbstractTerminal)
     b.undetermined
 end
 
 ## Union
 
-function _apply!(b::MDDForest, ::MDDUnion, f::Terminal{Undetermined}, g::Terminal{Tx}) where Tx <: Union{ValueT, Bool}
+function _apply!(b::MDDForest, ::MDDUnion, f::Terminal{Nothing}, g::Terminal{Tx}) where Tx <: Union{ValueT, Bool}
     g
 end
 
-function _apply!(b::MDDForest, ::MDDUnion, f::Terminal{Tx}, g::Terminal{Undetermined}) where Tx <: Union{ValueT, Bool}
+function _apply!(b::MDDForest, ::MDDUnion, f::Terminal{Tx}, g::Terminal{Nothing}) where Tx <: Union{ValueT, Bool}
     f
 end
 
@@ -453,7 +451,7 @@ function _apply!(b::MDDForest, ::MDDUnion, f::Terminal{Tx}, g::Terminal{Ty}) whe
     throw(ErrorException("There exists a conflict condition."))
 end
 
-function _apply!(b::MDDForest, ::MDDUnion, f::Terminal{Undetermined}, g::Terminal{Undetermined})
+function _apply!(b::MDDForest, ::MDDUnion, f::Terminal{Nothing}, g::Terminal{Nothing})
     b.undetermined
 end
 

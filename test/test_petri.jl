@@ -1,7 +1,7 @@
 using DD.MDD
 using Random
 
-import DD.MDD: MDDForest, AbstractNode, ValueT, Terminal, Node, Undetermined
+import DD.MDD: MDDForest, AbstractNode, ValueT, Terminal, Node
 
 """
 getbounds(forest, f, lower, upper)
@@ -16,7 +16,7 @@ function _getbounds!(f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, ca
     [f.value, f.value]
 end
 
-function _getbounds!(f::Terminal{Undetermined}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
+function _getbounds!(f::Terminal{Nothing}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
     [nothing, nothing]
 end
 
@@ -104,7 +104,7 @@ function _getidnode!(f::Terminal{ValueT}, lower::Vector{ValueT}, upper::Vector{V
     push!(result2, f)
 end
 
-function _getidnode!(f::Terminal{Undetermined}, lower::Vector{ValueT}, upper::Vector{ValueT}, id, visited, result1, result2)
+function _getidnode!(f::Terminal{Nothing}, lower::Vector{ValueT}, upper::Vector{ValueT}, id, visited, result1, result2)
     return
 end
 
@@ -114,7 +114,7 @@ function _getbounds3!(f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, c
     end
 end
 
-function _getbounds3!(f::Terminal{Undetermined}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
+function _getbounds3!(f::Terminal{Nothing}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
     get(cache, f.id) do
         cache[f.id] = [nothing, nothing]
     end

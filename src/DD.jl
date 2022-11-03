@@ -7,5 +7,6 @@ module DD
 include("_bdd.jl")
 # include("_bdd2.jl")
 include("_mdd.jl")
+include("_mss.jl")
 
 end

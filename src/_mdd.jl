@@ -27,6 +27,7 @@ export
     todot,
     ifelse!,
     ifelse,
+    @match,
     mdd
 
 """
@@ -658,5 +659,56 @@ end
 Base.:(!)(x::AbstractNode) = not!(getdd(x), x)
 Base.:(-)(x::AbstractNode) = minus!(getdd(x), Terminal(getdd(x), 0), x)
 todot(f::AbstractNode) = todot(getdd(f), f)
+
+"""
+macro
+    @match
+
+usage
+
+    z = @match(
+        x + y => x,
+        _ => 1
+        )
+
+"""
+
+function _cond(s::Any)
+    s
+end
+
+function _cond(x::Expr)
+    if Meta.isexpr(x, :(&&))
+        Expr(:call, :and, [_cond(u) for u = x.args]...)
+    elseif Meta.isexpr(x, :(||))
+        Expr(:call, :or, [_cond(u) for u = x.args]...)
+    else
+        x
+    end
+end
+
+function _match(v)
+    if length(v) > 1
+        x = v[1]
+        if Meta.isexpr(x, :call) && x.args[1] == :(=>)
+            Expr(:call, :ifelse, _cond(x.args[2]), _cond(x.args[3]), _match(v[2:end]))
+        else
+            throw(ErrorException("Format error"))
+        end
+    else
+        x = v[1]
+        if Meta.isexpr(x, :call) && x.args[1] == :(=>) && x.args[2] == :(_)
+            _cond(x.args[3])
+        elseif Meta.isexpr(x, :call) && x.args[1] == :(=>)
+            Expr(:call, :ifelse, _cond(x.args[2]), _cond(x.args[3]), :nothing)
+        else
+            throw(ErrorException("Format error"))
+        end
+    end
+end
+
+macro match(xs...)
+    esc(_match(xs))
+end
 
 end

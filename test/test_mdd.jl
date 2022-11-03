@@ -1,6 +1,6 @@
 import DD.MDD: MDDForest, NodeHeader, Terminal, Node, AbstractNode, todot, apply!, MDDMin, MDDMax
 import DD.MDD: var!, gte!, lt!, gt!, lte!, eq!, neq!, ifelse!, and!, or!, max!, min!, plus!, minus!, mul!, ValueT
-import DD.MDD: MDDIf, MDDElse, mdd, and, or, ifelse
+import DD.MDD: MDDIf, MDDElse, mdd, and, or, ifelse, @match
 
 @testset "MDD1" begin
     b = MDDForest()
@@ -148,4 +148,28 @@ end
     z = var!(b, :z, 3, 0:2)
     a = ifelse(x + y >= 1, z, nothing)
     println(todot(a))
+end
+
+@testset "Macro01" begin
+    b = mdd()
+    x = var!(b, :x, 1, 0:2)
+    y = var!(b, :y, 2, 0:2)
+    z = var!(b, :z, 3, 0:2)
+    a = @macroexpand @match(
+        x + y == 1 => 0,
+        x + y == 2 => 1
+    )
+    println(a)
+end
+
+@testset "Macro02" begin
+    b = mdd()
+    x = var!(b, :x, 1, 0:2)
+    y = var!(b, :y, 2, 0:2)
+    z = var!(b, :z, 3, 0:2)
+    a = @macroexpand @match(
+        x + y == 1 && z == 0 => 0,
+        _ => 1
+    )
+    println(a)
 end

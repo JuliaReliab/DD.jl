@@ -1,5 +1,10 @@
+module MSSTest
+
+using DD
+using Test
+
 import DD.MultiState: MSS, mssvar!, mdd, prob
-import DD.MDD: todot, ifthenelse, @match, and, or
+import DD.MDD: todot, ifthenelse, @match, and, or, mdd
 using Random
 
 @testset "MSS1" begin
@@ -140,3 +145,4 @@ end
     println([prob(SS, p, v) for v = [0,1,2,3]])
 end
 
+end

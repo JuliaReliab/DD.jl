@@ -32,7 +32,7 @@ export
     mdd
 
 """
-AbstractNode{Ts}
+AbstractNode
 
 An abstract node for BDD. The parameter Ts represents a type for a symbol of variable.
 Ts is usually Symbol.
@@ -196,8 +196,6 @@ end
 function getdd(f::AbstractNode)
     f.b
 end
-
-Base.issetequal(x::AbstractNode, y::AbstractNode) = x.id == y.id
 
 """
 uniapply

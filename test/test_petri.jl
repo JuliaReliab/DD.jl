@@ -1,3 +1,8 @@
+module PetriTest
+
+using DD
+using Test
+
 using DD.MDD
 using Random
 
@@ -413,3 +418,4 @@ end
 end
 
 
+end

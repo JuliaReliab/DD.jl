@@ -1,50 +1,81 @@
-using DD.BDD
+module BDDTest
+
+using DD
+using Test
+import DD.BDD: bdd, var!, todot, Node, and, or, ifthenelse, xor, imp
 
 @testset "BDD1" begin
-    b = bdd(Symbol)
-    header!(b, :x)
-    header!(b, :y)
-    header!(b, :z)
-    println(b.headers)
+    b = bdd()
+    x = var!(b, :x, 1)
+    y = var!(b, :y, 2)
+    z = var!(b, :z, 3)
+    println(x)
+    println(todot(x))
 end
 
 @testset "BDD2" begin
-    b = bdd(Symbol)
-    header!(b, :x)
-    header!(b, :y)
-    x = var!(b, :x)
-    y = var!(b, :y)
-    z = and(b, x, y)
-    println(todot(b, z))
+    b = bdd()
+    x = var!(b, :x, 1)
+    y = var!(b, :y, 2)
+    z = and(x, y)
+    println(todot(z))
 
-    tmp = node!(b, header!(b, :x), b.zero, b.one)
-    tmp = node!(b, header!(b, :y), b.zero, tmp)
+    tmp = Node(b, x.header, b.zero, b.one)
+    tmp = Node(b, y.header, b.zero, tmp)
     @test z.id == tmp.id
+
 end
 
 @testset "BDD3" begin
-    b = bdd(Symbol)
-    x = var!(b, :x)
-    y = var!(b, :y)
-    z = or(b, x, y)
-    println(todot(b, z))
+    b = bdd()
+    x = var!(b, :x, 1)
+    y = var!(b, :y, 2)
+    z = or(x, y)
+    println(todot(z))
 
-    tmp = node!(b, header!(b, :x), b.zero, b.one)
-    tmp = node!(b, header!(b, :y), tmp, b.one)
+    tmp = Node(b, x.header, b.zero, b.one)
+    tmp = Node(b, y.header, tmp, b.one)
     @test z.id == tmp.id
 end
 
 @testset "BDD4" begin
-    b = bdd(Symbol)
-    x = var!(b, :x)
-    y = var!(b, :y)
-    z = var!(b, :z)
-    result1 = and(b, or(b, x, y), z)
-    println(todot(b, result1))
-
-    result2 = or(b, and(b, not(b, x), not(b, y)), not(b, z))
-    println(todot(b, result2))
-
-    result3 = not(b, result1)
-    @test result3.id == result2.id
+    b = bdd()
+    x = var!(b, :x, 1)
+    y = var!(b, :y, 2)
+    z = var!(b, :z, 3)
+    result1 = ifthenelse(x, y, z)
+    println(todot(result1))
 end
+
+@testset "BDD5" begin
+    b = bdd()
+    x = var!(b, :x, 1)
+    y = var!(b, :y, 2)
+    z = var!(b, :z, 3)
+    result1 = xor(x, y)
+    println(todot(result1))
+end
+
+@testset "BDD6" begin
+    b = bdd()
+    x = var!(b, :x, 1)
+    y = var!(b, :y, 2)
+    z = var!(b, :z, 3)
+    result1 = imp(x, y)
+    println(todot(result1))
+end
+
+@testset "BDD7" begin
+    b = bdd()
+    x = var!(b, :x, 1)
+    y = var!(b, :y, 2)
+    z = var!(b, :z, 3)
+    result1 = (x & y) | z
+    println(todot(result1))
+    result2 = (x * y) + z
+    println(todot(result2))
+    @test result1.id == result2.id
+end
+
+end
+

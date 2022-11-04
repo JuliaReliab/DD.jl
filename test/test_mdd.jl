@@ -179,4 +179,10 @@ end
     println(a)
 end
 
+@testset "and01" begin
+    b = mdd()
+    a = and(false, Terminal(b, false), true)
+    println(todot(a))
+end
+
 end

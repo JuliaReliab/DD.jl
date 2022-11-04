@@ -507,7 +507,7 @@ gte!(b::MDDForest, f::AbstractNode, g::AbstractNode) = apply!(b, MDDGte(), f, g)
 eq!(b::MDDForest, f::AbstractNode, g::AbstractNode) = apply!(b, MDDEq(), f, g)
 neq!(b::MDDForest, f::AbstractNode, g::AbstractNode) = apply!(b, MDDNeq(), f, g)
 
-function and!(b::MDDForest, x::AbstractNode, xs...)
+function and!(b::MDDForest, x::AbstractNode, xs::Vararg{AbstractNode})
     tmp = x
     for u = xs
         tmp = apply!(b, MDDAnd(), tmp, u)
@@ -515,7 +515,7 @@ function and!(b::MDDForest, x::AbstractNode, xs...)
     tmp
 end
 
-function or!(b::MDDForest, x::AbstractNode, xs...)
+function or!(b::MDDForest, x::AbstractNode, xs::Vararg{AbstractNode})
     tmp = x
     for u = xs
         tmp = apply!(b, MDDOr(), tmp, u)
@@ -523,14 +523,39 @@ function or!(b::MDDForest, x::AbstractNode, xs...)
     tmp
 end
 
-function and(x::AbstractNode, xs...)
+function and(x::AbstractNode, xs::Vararg{AbstractNode})
     b = getdd(x)
     and!(b, x, xs...)
 end
 
-function or(x::AbstractNode, xs...)
+function or(x::AbstractNode, xs::Vararg{AbstractNode})
     b = getdd(x)
     or!(b, x, xs...)
+end
+
+function _getddfromvec(xs...)
+    for x = xs
+        if typeof(x) <: AbstractNode
+            return getdd(x)
+        end
+    end
+    throw(ErrorException("Cannot find a node"))
+end
+
+_tonode(b::MDDForest, x::AbstractNode) = x
+_tonode(b::MDDForest, x::Bool) = Terminal(b, x)
+_tonode(b::MDDForest, x::ValueT) = Terminal(b, x)
+
+function and(xs::Vararg{Union{AbstractNode,Bool}})
+    b = _getddfromvec(xs...)
+    xs = [_tonode(b, x) for x = xs]
+    and!(b, xs...)
+end
+
+function or(xs::Vararg{Union{AbstractNode,Bool}})
+    b = _getddfromvec(xs...)
+    xs = [_tonode(b, x) for x = xs]
+    or!(b, xs...)
 end
 
 not!(b::MDDForest, f::AbstractNode) = apply!(b, MDDNot(), f)

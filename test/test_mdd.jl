@@ -134,7 +134,12 @@ end
     a = max(x + y, z)
     println(todot(a))
     a = min(x + y, z)
+    a = @match(
+        a == 2 => nothing,
+        _ => a
+    )
     println(todot(a))
+    @test size(a) == (8, 14)
 end
 
 @testset "MDD11" begin

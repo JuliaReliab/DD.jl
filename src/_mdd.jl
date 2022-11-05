@@ -25,6 +25,7 @@ export
     or!,
     not!,
     todot,
+    size,
     ifthenelse!,
     ifthenelse,
     @match,
@@ -489,6 +490,38 @@ function _todot!(b::MDDForest, f::Node, visited::Set{NodeID}, io::IO)
     end
     push!(visited, f.id)
     nothing
+end
+
+### node and edge
+
+function Base.size(f::AbstractNode)
+    b = getdd(f)
+    visited = Set{NodeID}()
+    edges = _size!(b, f, visited)
+    (length(visited), edges)
+end
+
+function _size!(b::MDDForest, f::AbstractTerminal, visited::Set{NodeID})
+    if in(f.id, visited)
+        return 0
+    end
+    push!(visited, f.id)
+    return 0
+end
+
+function _size!(b::MDDForest, f::Node, visited::Set{NodeID})
+    if in(f.id, visited)
+        return 0
+    end
+    tmp = 0
+    for (i,x) = enumerate(f.header.domains)
+        if f.nodes[i].id != b.undetermined.id
+            tmp += _size!(b, f.nodes[i], visited)
+            tmp += 1
+        end
+    end
+    push!(visited, f.id)
+    return tmp
 end
 
 ### utilities

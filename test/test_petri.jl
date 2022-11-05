@@ -380,7 +380,7 @@ end
     lower = [0, 0, 0, 0, 0, 0]
     upper = [n, n, n, n, n, n]
     @time begin
-        event = [rand(rng, 1:6), rand(rng, 1:6)]
+        event = [4, 5] #rand(rng, 1:6), rand(rng, 1:6)]
         println(event)
         l = cat(lower, event, dims=1)
         u = cat(upper, event, dims=1)

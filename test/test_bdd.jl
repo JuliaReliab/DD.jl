@@ -1,8 +1,9 @@
 module BDDTest
 
-using DD
+using DD.BDD
 using Test
-import DD.BDD: bdd, var!, todot, Node, and, or, ifthenelse, xor, imp
+
+import DD.BDD: node
 
 @testset "BDD1" begin
     b = bdd()
@@ -20,8 +21,8 @@ end
     z = and(x, y)
     println(todot(z))
 
-    tmp = Node(b, x.header, b.zero, b.one)
-    tmp = Node(b, y.header, b.zero, tmp)
+    tmp = node(b, x.header, b.zero, b.one)
+    tmp = node(b, y.header, b.zero, tmp)
     @test z.id == tmp.id
 
 end
@@ -33,8 +34,8 @@ end
     z = or(x, y)
     println(todot(z))
 
-    tmp = Node(b, x.header, b.zero, b.one)
-    tmp = Node(b, y.header, tmp, b.one)
+    tmp = node(b, x.header, b.zero, b.one)
+    tmp = node(b, y.header, tmp, b.one)
     @test z.id == tmp.id
 end
 

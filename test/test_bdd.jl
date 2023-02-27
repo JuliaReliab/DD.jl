@@ -138,5 +138,21 @@ end
     println(b)
 end
 
+@testset "BDD11" begin
+    b = bdd()
+    addvar!(b, :x, 1)
+    addvar!(b, :y, 2)
+    addvar!(b, :z, 3)
+    f = [
+        [false, false, true],
+        [false, true, false],
+        [true, false, false],
+        [true, false, true],
+        [true, true, false]
+    ]
+    x = addfunc!(b, f)
+    println(todot(x))
+end
+
 end
 

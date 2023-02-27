@@ -29,6 +29,8 @@ export neq, neq!
 export imp, imp!
 export ifthenelse, ifthenelse!
 
+export addfunc!
+
 """
     AbstractNode
 
@@ -797,5 +799,28 @@ end
 
 Base.:(!)(x::AbstractNode) = not(x)
 Base.:(~)(x::AbstractNode) = not(x)
+
+"""
+    addfunc!(b::Forest, xs::Vector{Vector{Bool}})
+
+Add functions to BDD.
+"""
+function addfunc!(b::Forest, xs::Vector{Vector{Bool}})
+    vars = Dict([level(x) => var(b, k) for (k,x) = b.headers]...)
+    mp = false
+    for x = xs
+        tmp = true
+        for (i,v) = enumerate(x)
+            if v == true
+                tmp = and(tmp, vars[i])
+            else
+                tmp = and(tmp, not(vars[i]))
+            end
+        end
+        mp = or(mp, tmp)
+    end
+    mp
+end
+
 
 end

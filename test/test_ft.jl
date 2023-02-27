@@ -151,7 +151,7 @@ end
     y = var(b, :y)
     z = var(b, :z)
 
-    f = (x + y) + z
+    f = (x + y) * z + x
 
     println(todot(f))
 

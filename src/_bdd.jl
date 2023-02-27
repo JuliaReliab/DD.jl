@@ -4,9 +4,21 @@ BDD Module
 
 module BDD
 
+export AbstractNode
+export AbstractNonTerminalNode
+export AbstractTerminalNode
+export FullyReduced
+export QuasiReduced
+
 export bdd
 export forest
-export var!
+export get_zero
+export get_one
+export level
+export label
+
+export addvar!
+export var
 export todot
 export and, and!
 export or, or!
@@ -64,7 +76,6 @@ const Level = Int
     OrOperator <: AbstractBinaryOperator
     XorOperator <: AbstractBinaryOperator
     EqOperator <: AbstractBinaryOperator
-    NeqOperator <: AbstractBinaryOperator
 
 Types for operations.
 - NotOperator: Logical not operation
@@ -72,7 +83,6 @@ Types for operations.
 - OrOperator: Logical or operation
 - XorOperator: Logical xor operation
 - EqOperator: Logical eq operation
-- NeqOperator: Logical neq operation
 """
 abstract type AbstractOperator end
 abstract type AbstractUnaryOperator <: AbstractOperator end
@@ -82,7 +92,6 @@ struct AndOperator <: AbstractBinaryOperator end
 struct OrOperator <: AbstractBinaryOperator end
 struct XorOperator <: AbstractBinaryOperator end
 struct EqOperator <: AbstractBinaryOperator end
-struct NeqOperator <: AbstractBinaryOperator end
 
 
 """
@@ -119,39 +128,6 @@ function _get_next!(mgr::NodeManager)::NodeID
 end
 
 """
-    Forest
-
-A mutable structure to store the information on DD. The fields are
-- mgr: NodeManager to issue IDs of nodes
-- hmgr: NodeManager to issue IDs of headers
-- utable: Unique table to identify the tuple (header id, low node id, high node id)
-- zero: A terminal node indicating zero
-- one: A terminal node indicating one
-- cache: A cache for operations
-"""
-mutable struct Forest
-    mgr::NodeManager
-    hmgr::NodeManager
-    utable::Dict{Tuple{NodeID,NodeID,NodeID},AbstractNode}
-    zero::AbstractTerminalNode
-    one::AbstractTerminalNode
-    cache::Dict{Tuple{AbstractOperator,NodeID,NodeID},AbstractNode}
-    policy::AbstractPolicy
-
-    function Forest(policy::AbstractPolicy)
-        b = new()
-        b.mgr = NodeManager(0)
-        b.hmgr = NodeManager(0)
-        b.utable = Dict{Tuple{NodeID,NodeID,NodeID},AbstractNode}()
-        b.zero = Terminal(b, _get_next!(b.mgr), false)
-        b.one = Terminal(b, _get_next!(b.mgr), true)
-        b.cache = Dict{Tuple{AbstractOperator,NodeID,NodeID},AbstractNode}()
-        b.policy = policy
-        b
-    end
-end
-
-"""
     NodeHeader
 
 A mutable structure indicating the information for nodes in the same level.
@@ -167,6 +143,59 @@ mutable struct NodeHeader
     function NodeHeader(id::NodeID, level::Level, label::Symbol)
         new(id, level, label)
     end
+end
+
+"""
+    Forest
+
+A mutable structure to store the information on DD. The fields are
+- mgr: NodeManager to issue IDs of nodes
+- hmgr: NodeManager to issue IDs of headers
+- utable: Unique table to identify the tuple (header id, low node id, high node id)
+- zero: A terminal node indicating zero
+- one: A terminal node indicating one
+- cache: A cache for operations
+"""
+mutable struct Forest
+    mgr::NodeManager
+    hmgr::NodeManager
+    headers::Dict{Symbol,NodeHeader}
+    utable::Dict{Tuple{NodeID,NodeID,NodeID},AbstractNode}
+    zero::AbstractTerminalNode
+    one::AbstractTerminalNode
+    cache::Dict{Tuple{AbstractOperator,NodeID,NodeID},AbstractNode}
+    policy::AbstractPolicy
+
+    function Forest(policy::AbstractPolicy)
+        b = new()
+        b.mgr = NodeManager(0)
+        b.hmgr = NodeManager(0)
+        b.headers = Dict{Symbol,NodeHeader}()
+        b.utable = Dict{Tuple{NodeID,NodeID,NodeID},AbstractNode}()
+        b.zero = Terminal(b, _get_next!(b.mgr), false)
+        b.one = Terminal(b, _get_next!(b.mgr), true)
+        b.cache = Dict{Tuple{AbstractOperator,NodeID,NodeID},AbstractNode}()
+        b.policy = policy
+        b
+    end
+end
+
+function Base.show(io::IO, b::Forest)
+    Base.show(io, "Total nodes $(b.mgr.nextid)")
+    Base.show(io, "Total headers $(b.hmgr.nextid)")
+    Base.show(io, "Length of unique table $(length(b.utable))")
+    Base.show(io, "Length of cache $(length(b.cache))")
+    Base.show(io, "Policy $(b.policy)")
+end
+
+"""
+    get_headers(b::Forest)
+
+Get a vector of headers sorted by level.
+"""
+function get_headers(b::Forest)
+    hs = collect(values(b.headers))
+    sort(hs, by = x -> x.level)
 end
 
 """
@@ -221,6 +250,55 @@ function node(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode, :
     end
 end
 
+"""
+    zero(x::AbstractNonTerminalNode)
+
+Get a node of low.
+"""
+function get_zero(x::AbstractNonTerminalNode)
+    x.low
+end
+
+"""
+    one(x::AbstractNonTerminalNode)
+
+Get a node of high.
+"""
+function get_one(x::AbstractNonTerminalNode)
+    x.low
+end
+
+"""
+    level(x::AbstractNonTerminalNode)
+    level(x::AbstractTerminalNode)
+
+Get a level
+"""
+function level(x::AbstractNonTerminalNode)
+    x.header.level
+end
+
+function level(x::AbstractTerminalNode)
+    Level(0)
+end
+
+"""
+    label(x::AbstractNonTerminalNode)
+    label(x::AbstractTerminalNode)
+
+Get a label
+"""
+function label(x::AbstractNonTerminalNode)
+    x.header.label
+end
+
+function label(x::AbstractTerminalNode)
+    if x.value
+        Symbol(1)
+    else
+        Symbol(0)
+    end
+end
 
 """
     Terminal
@@ -247,6 +325,24 @@ function Terminal(b::Forest, value::Bool)
 end
 
 """
+    iszero(x::AbstractTerminalNode)
+
+Return a boolean value if the terminal is zero.
+"""
+function Base.iszero(x::AbstractTerminalNode)
+    x.value == false
+end
+
+"""
+    isone(x::AbstractTerminalNode)
+
+Return a boolean value if the terminal is one.
+"""
+function Base.isone(x::AbstractTerminalNode)
+    x.value == true
+end
+
+"""
    forest(f)
 
 Return the forest of a given node
@@ -265,8 +361,24 @@ function apply!(b::Forest, op::AbstractUnaryOperator, f::AbstractNode)
     return _apply!(b, op, f)
 end
 
+function apply!(b::Forest, op::AbstractUnaryOperator, f::Bool)
+    _apply!(b, op, Terminal(b, f))
+end
+
 function apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNode, g::AbstractNode)
     return _apply!(b, op, f, g)
+end
+
+function apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNode, g::Bool)
+    _apply!(b, op, f, Terminal(b, g))
+end
+
+function apply!(b::Forest, op::AbstractBinaryOperator, f::Bool, g::AbstractNode)
+    _apply!(b, op, Terminal(b, f), g)
+end
+
+function apply!(b::Forest, op::AbstractBinaryOperator, f::Bool, g::Bool)
+    _apply!(b, op, Terminal(b, f), Terminal(b, g))
 end
 
 function _apply!(b::Forest, op::AbstractUnaryOperator, f::AbstractNonTerminalNode)
@@ -276,22 +388,6 @@ function _apply!(b::Forest, op::AbstractUnaryOperator, f::AbstractNonTerminalNod
         high = _apply!(b, op, f.high)
         node(b, f.header, low, high)
     end
-end
-
-function _apply!(b::Forest, op::AbstractUnaryOperator, f::Bool)
-    _apply!(b, op, Terminal(b, f))
-end
-
-function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNode, g::Bool)
-    _apply!(b, op, f, Terminal(b, g))
-end
-
-function _apply!(b::Forest, op::AbstractBinaryOperator, f::Bool, g::AbstractNonTerminalNode)
-    _apply!(b, op, Terminal(b, f), g)
-end
-
-function _apply!(b::Forest, op::AbstractBinaryOperator, f::Bool, g::Bool)
-    _apply!(b, op, Terminal(b, f), Terminal(b, g))
 end
 
 function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNode, g::AbstractNonTerminalNode)
@@ -344,14 +440,57 @@ end
 
 ### Eq
 
-function _apply!(b::Forest, ::EqOperator, f::Terminal, g::Terminal)
-    Terminal(b, f.value == g.value)
+function _apply!(b::Forest, op::EqOperator, f::AbstractNonTerminalNode, g::AbstractNonTerminalNode)
+    if f === g
+        return b.one
+    end
+    key = (op, f.id, g.id)
+    get(b.cache, key) do
+        if f.header.level > g.header.level
+            low = _apply!(b, op, f.low, g)
+            high = _apply!(b, op, f.high, g)
+            ans = node(b, f.header, low, high)
+        elseif f.header.level < g.header.level
+            low = _apply!(b, op, f, g.low)
+            high = _apply!(b, op, f, g.high)
+            ans = node(b, g.header, low, high)
+        else
+            low = _apply!(b, op, f.low, g.low)
+            high = _apply!(b, op, f.high, g.high)
+            ans = node(b, f.header, low, high)
+        end
+        b.cache[key] = ans
+    end
 end
 
-## Neq
+function _apply!(b::Forest, op::EqOperator, f::AbstractTerminalNode, g::AbstractNonTerminalNode)
+    if f === g
+        return b.one
+    end
+    key = (op, f.id, g.id)
+    get(b.cache, key) do
+        low = _apply!(b, op, f, g.low)
+        high = _apply!(b, op, f, g.high)
+        ans = node(b, g.header, low, high)
+        b.cache[key] = ans
+    end
+end
 
-function _apply!(b::Forest, ::NeqOperator, f::Terminal, g::Terminal)
-    Terminal(b, f.value != g.value)
+function _apply!(b::Forest, op::EqOperator, f::AbstractNonTerminalNode, g::AbstractTerminalNode)
+    if f === g
+        return b.one
+    end
+    key = (op, f.id, g.id)
+    get(b.cache, key) do
+        low = _apply!(b, op, f.low, g)
+        high = _apply!(b, op, f.high, g)
+        ans = node(b, f.header, low, high)
+        b.cache[key] = ans
+    end
+end
+
+function _apply!(b::Forest, ::EqOperator, f::Terminal, g::Terminal)
+    Terminal(b, f.value == g.value)
 end
 
 ## And
@@ -463,16 +602,49 @@ Create BDD forest with the reduction policy.
 bdd(policy::AbstractPolicy = FullyReduced()) = Forest(policy)
 
 """
-    var!(b::Forest, name::Symbol, level::Int)
+    addvar!(b::Forest, name::Symbol, level::Int)
 
-Create a new variable.
+Define a new variable in BDD
 - b: Forest
 - name: Symbol of variable
 - level: Level in BDD
 """
-function var!(b::Forest, name::Symbol, level::Int)
+function addvar!(b::Forest, name::Symbol, level::Int)
     h = NodeHeader(_get_next!(b.hmgr), Level(level), name)
+    b.headers[name] = h
+end
+
+"""
+    var(b::Forest, name::Symbol)
+
+Get a node representing that a given variable is true/one.
+- b: Forest
+- name: Symbol of variable
+"""
+function var(b::Forest, name::Symbol)
+    var(b, name, b.policy)
+end
+
+function var(b::Forest, name::Symbol, ::FullyReduced)
+    h = b.headers[name]
     node(b, h, Terminal(b, false), Terminal(b, true))
+end
+
+function var(b::Forest, name::Symbol, ::QuasiReduced)
+    h = b.headers[name]
+    hs = get_headers(b)
+    fzero = b.zero
+    fone = b.one
+    for x = hs
+        if x.level < h.level
+            fzero = node(b, x, fzero, fzero)
+            fone = node(b, x, fone, fone)
+        else
+            fzero = node(b, x, fzero, fone)
+            fone = fzero
+        end
+    end
+    fzero
 end
 
 """
@@ -489,9 +661,8 @@ function and!(b::Forest, x, xs...)
     tmp
 end
 
-function and(x::AbstractNode, xs...)
-    and!(forest(x), x, xs...)
-end
+and(x::AbstractNode, xs...) = and!(forest(x), x, xs...)
+and(x::Bool, y::AbstractNode) = and!(forest(y), x, y)
 
 """
     or(x::AbstractNode, xs...)
@@ -507,9 +678,8 @@ function or!(b::Forest, x, xs...)
     tmp
 end
 
-function or(x::AbstractNode, xs...)
-    or!(forest(x), x, xs...)
-end
+or(x::AbstractNode, xs...) = or!(forest(x), x, xs...)
+or(x::Bool, y::AbstractNode) = or!(forest(y), x, y)
 
 """
     not(x::AbstractNode)
@@ -521,9 +691,7 @@ function not!(b::Forest, x)
     apply!(b, NotOperator(), x)
 end
 
-function not(x::AbstractNode)
-    not!(forest(x), x)
-end
+not(x::AbstractNode) = not!(forest(x), x)
 
 """
     xor(x::AbstractNode, xs...)
@@ -535,9 +703,9 @@ function xor!(b::Forest, x, y)
     apply!(b, XorOperator(), x, y)
 end
 
-function Base.xor(x::AbstractNode, y)
-    xor!(forest(x), x, y)
-end
+Base.xor(x::AbstractNode, y::AbstractNode) = xor!(forest(x), x, y)
+Base.xor(x::AbstractNode, y::Bool) = xor!(forest(x), x, y)
+Base.xor(x::Bool, y::AbstractNode) = xor!(forest(y), x, y)
 
 """
    eq!(b::Forest, x, y)
@@ -549,9 +717,9 @@ function eq!(b::Forest, x, y)
     apply!(b, EqOperator(), x, y)
 end
 
-function eq(x::AbstractNode, y)
-    eq!(forest(x), x, y)
-end
+eq(x::AbstractNode, y::AbstractNode) = eq!(forest(x), x, y)
+eq(x::AbstractNode, y::Bool) = eq!(forest(x), x, y)
+eq(x::Bool, y::AbstractNode) = eq!(forest(y), x, y)
 
 """
    neq!(b::Forest, x, y)
@@ -560,12 +728,12 @@ end
 NEQ operation.
 """
 function neq!(b::Forest, x, y)
-    apply!(b, NeqOperator(), x, y)
+    not!(b, eq!(b, x, y))
 end
 
-function neq(x::AbstractNode, y)
-    neq!(forest(x), x, y)
-end
+neq(x::AbstractNode, y::AbstractNode) = neq!(forest(x), x, y)
+neq(x::AbstractNode, y::Bool) = neq!(forest(x), x, y)
+neq(x::Bool, y::AbstractNode) = neq!(forest(y), x, y)
 
 """
    imp!(b::Forest, x, y)
@@ -577,9 +745,9 @@ function imp!(b::Forest, f, g)
     or!(b, not!(b, f), g)
 end
 
-function imp(f::AbstractNode, g)
-    imp!(forest(f), f, g)
-end
+imp(f::AbstractNode, g::AbstractNode) = imp!(forest(f), f, g)
+imp(f::AbstractNode, g::Bool) = imp!(forest(f), f, g)
+imp(f::Bool, g::AbstractNode) = imp!(forest(g), f, g)
 
 """
    ifthenelse!(b::Forest, f, g, h)
@@ -591,18 +759,24 @@ function ifthenelse!(b::Forest, f, g, h)
     or!(b, and!(b, f, g), and!(b, not!(b, f), h))
 end
 
-function ifthenelse(f::AbstractNode, g, h)
-    ifthenelse!(forest(f), f, g, h)
-end
+ifthenelse(f::AbstractNode, g::AbstractNode, h::AbstractNode) = ifthenelse!(forest(f), f, g, h)
+ifthenelse(f::AbstractNode, g::AbstractNode, h::Bool) = ifthenelse!(forest(f), f, g, h)
+ifthenelse(f::AbstractNode, g::Bool, h::AbstractNode) = ifthenelse!(forest(f), f, g, h)
+ifthenelse(f::Bool, g::AbstractNode, h::AbstractNode) = ifthenelse!(forest(g), f, g, h)
+ifthenelse(f::AbstractNode, g::Bool, h::Bool) = ifthenelse!(forest(f), f, g, h)
+ifthenelse(f::Bool, g::AbstractNode, h::Bool) = ifthenelse!(forest(g), f, g, h)
+ifthenelse(f::Bool, g::Bool, h::AbstractNode) = ifthenelse!(forest(h), f, g, h)
 
 ops = [:(==), :(!=), :(&), :(|), :(⊻), :(*), :(+)]
-fns = [:eq!, :xor!, :and!, :or!, :xor!, :and!, :or!]
+fns = [:eq, :neq, :and, :or, :xor, :and, :or]
 
 for (op, fn) = zip(ops, fns)
-    @eval Base.$op(x::AbstractNode, y) = $fn(forest(x), x, y)
+    @eval Base.$op(x::AbstractNode, y::AbstractNode) = $fn(x, y)
+    @eval Base.$op(x::AbstractNode, y::Bool) = $fn(x, y)
+    @eval Base.$op(x::Bool, y::AbstractNode) = $fn(x, y)
 end
 
-Base.:(!)(x::AbstractNode) = not!(forest(x), x)
-Base.:(~)(x::AbstractNode) = not!(forest(x), x)
+Base.:(!)(x::AbstractNode) = not(x)
+Base.:(~)(x::AbstractNode) = not(x)
 
 end

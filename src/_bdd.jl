@@ -20,6 +20,7 @@ export label
 export addvar!
 export var
 export todot
+export not, not!
 export and, and!
 export or, or!
 export xor, xor!
@@ -265,15 +266,20 @@ end
 Get a node of high.
 """
 function get_one(x::AbstractNonTerminalNode)
-    x.low
+    x.high
 end
 
 """
+    level(x::NodeHearder)
     level(x::AbstractNonTerminalNode)
     level(x::AbstractTerminalNode)
 
 Get a level
 """
+function level(x::NodeHeader)
+    x.level
+end
+
 function level(x::AbstractNonTerminalNode)
     x.header.level
 end
@@ -283,11 +289,16 @@ function level(x::AbstractTerminalNode)
 end
 
 """
+    label(x::NodeHeader)
     label(x::AbstractNonTerminalNode)
     label(x::AbstractTerminalNode)
 
 Get a label
 """
+function label(x::NodeHeader)
+    x.label
+end
+
 function label(x::AbstractNonTerminalNode)
     x.header.label
 end
@@ -329,6 +340,10 @@ end
 
 Return a boolean value if the terminal is zero.
 """
+function Base.iszero(x::AbstractNonTerminalNode)
+    false
+end
+
 function Base.iszero(x::AbstractTerminalNode)
     x.value == false
 end
@@ -338,6 +353,10 @@ end
 
 Return a boolean value if the terminal is one.
 """
+function Base.isone(x::AbstractNonTerminalNode)
+    false
+end
+
 function Base.isone(x::AbstractTerminalNode)
     x.value == true
 end

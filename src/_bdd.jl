@@ -17,8 +17,8 @@ export get_one
 export level
 export label
 
-export addvar!
-export var
+export defvar!
+export var!
 export todot
 export not, not!
 export and, and!
@@ -29,7 +29,7 @@ export neq, neq!
 export imp, imp!
 export ifthenelse, ifthenelse!
 
-export addfunc!
+export genfunc!
 
 """
     AbstractNode
@@ -623,35 +623,35 @@ Create BDD forest with the reduction policy.
 bdd(policy::AbstractPolicy = FullyReduced()) = Forest(policy)
 
 """
-    addvar!(b::Forest, name::Symbol, level::Int)
+    defvar!(b::Forest, name::Symbol, level::Int)
 
 Define a new variable in BDD
 - b: Forest
 - name: Symbol of variable
 - level: Level in BDD
 """
-function addvar!(b::Forest, name::Symbol, level::Int)
+function defvar!(b::Forest, name::Symbol, level::Int)
     h = NodeHeader(_get_next!(b.hmgr), Level(level), name)
     b.headers[name] = h
 end
 
 """
-    var(b::Forest, name::Symbol)
+    var!(b::Forest, name::Symbol)
 
 Get a node representing that a given variable is true/one.
 - b: Forest
 - name: Symbol of variable
 """
-function var(b::Forest, name::Symbol)
-    var(b, name, b.policy)
+function var!(b::Forest, name::Symbol)
+    var!(b, name, b.policy)
 end
 
-function var(b::Forest, name::Symbol, ::FullyReduced)
+function var!(b::Forest, name::Symbol, ::FullyReduced)
     h = b.headers[name]
     node(b, h, Terminal(b, false), Terminal(b, true))
 end
 
-function var(b::Forest, name::Symbol, ::QuasiReduced)
+function var!(b::Forest, name::Symbol, ::QuasiReduced)
     h = b.headers[name]
     hs = get_headers(b)
     fzero = b.zero
@@ -801,12 +801,12 @@ Base.:(!)(x::AbstractNode) = not(x)
 Base.:(~)(x::AbstractNode) = not(x)
 
 """
-    addfunc!(b::Forest, xs::Vector{Vector{Bool}})
+    genfunc!(b::Forest, xs::Vector{Vector{Bool}})
 
-Add functions to BDD.
+Generate a function to BDD.
 """
-function addfunc!(b::Forest, xs::Vector{Vector{Bool}})
-    vars = Dict([level(x) => var(b, k) for (k,x) = b.headers]...)
+function genfunc!(b::Forest, xs::Vector{Vector{Bool}})
+    vars = Dict([level(x) => var!(b, k) for (k,x) = b.headers]...)
     mp = false
     for x = xs
         tmp = true

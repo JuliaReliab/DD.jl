@@ -26,12 +26,12 @@ import DD.BDD: node
     end
     
     b = bdd()
-    addvar!(b, :x, 1)
-    addvar!(b, :y, 2)
-    addvar!(b, :z, 3)
-    x = var(b, :x)
-    y = var(b, :y)
-    z = var(b, :z)
+    defvar!(b, :x, 1)
+    defvar!(b, :y, 2)
+    defvar!(b, :z, 3)
+    x = var!(b, :x)
+    y = var!(b, :y)
+    z = var!(b, :z)
 
     f = (x + y) * z
     println(todot(f))
@@ -70,12 +70,12 @@ end
 
 @testset "FT2" begin
     b = bdd()
-    addvar!(b, :x, 1)
-    addvar!(b, :y, 2)
-    addvar!(b, :z, 3)
-    x = var(b, :x)
-    y = var(b, :y)
-    z = var(b, :z)
+    defvar!(b, :x, 1)
+    defvar!(b, :y, 2)
+    defvar!(b, :z, 3)
+    x = var!(b, :x)
+    y = var!(b, :y)
+    z = var!(b, :z)
 
     f = (x + y) * z
 
@@ -110,7 +110,7 @@ function mcs(b, f, vars, labels)
 end
 
 function mcs(b, f)
-    vars = Dict([level(x) => var(b, k) for (k,x) = b.headers]...)
+    vars = Dict([level(x) => var!(b, k) for (k,x) = b.headers]...)
     labels = Dict([level(x) => k for (k,x) = b.headers]...)
 
     result = []
@@ -123,18 +123,18 @@ end
 
 @testset "FT3" begin
     b = bdd()
-    addvar!(b, :x, 1)
-    addvar!(b, :y, 2)
-    addvar!(b, :z, 3)
-    x = var(b, :x)
-    y = var(b, :y)
-    z = var(b, :z)
+    defvar!(b, :x, 1)
+    defvar!(b, :y, 2)
+    defvar!(b, :z, 3)
+    x = var!(b, :x)
+    y = var!(b, :y)
+    z = var!(b, :z)
 
     f = (x + y) + z
 
     println(todot(f))
 
-    vars = Dict([level(x) => var(b, k) for (k,x) = b.headers]...)
+    vars = Dict([level(x) => var!(b, k) for (k,x) = b.headers]...)
     labels = Dict([level(x) => k for (k,x) = b.headers]...)
 
     res, f = mcs(b, f, vars, labels)
@@ -144,12 +144,12 @@ end
 
 @testset "FT4" begin
     b = bdd()
-    addvar!(b, :x, 1)
-    addvar!(b, :y, 2)
-    addvar!(b, :z, 3)
-    x = var(b, :x)
-    y = var(b, :y)
-    z = var(b, :z)
+    defvar!(b, :x, 1)
+    defvar!(b, :y, 2)
+    defvar!(b, :z, 3)
+    x = var!(b, :x)
+    y = var!(b, :y)
+    z = var!(b, :z)
 
     f = (x + y) * z + x
 

@@ -51,24 +51,7 @@ BDD is a compact representation for boolean functions with tree structures. The 
 
 where all the input variables and the ouput are defined by 0 or 1. The BDD representation of the above function is
 
-![](http://g.gravizo.com/g?
-digraph { layout=dot; overlap=false; splines=true; node [fontsize=10];
-"obj22" [shape = circle, label = "z"];
-"obj21" [shape = circle, label = "y"];
-"obj4" [shape = circle, label = "x"];
-"obj0" [shape = square, label = "0"];
-"obj4" -> "obj0" [label = "0"];
-"obj1" [shape = square, label = "1"];
-"obj4" -> "obj1" [label = "1"];
-"obj21" -> "obj4" [label = "0"];
-"obj21" -> "obj1" [label = "1"];
-"obj22" -> "obj21" [label = "0"];
-"obj6" [shape = circle, label = "y"];
-"obj6" -> "obj1" [label = "0"];
-"obj6" -> "obj0" [label = "1"];
-"obj22" -> "obj6" [label = "1"];
-}
-)
+![](doc/images/graphviz.png)
 
 From starting from the top node, we follow the edge corresponding to the given value. For example, we consider how to get the value `f(0,0,1)`. Since `z=1', we follow the edge 1 from the node `z`. The next node indicates the variable `y`. In this case, the value `y=0` and thus we follow the edge 0. Finally, we reach the terminal node 1 (indicated by a square). The value of function `f(0,0,1)` becomes 1. The Julia code for the construction of this fuction is
 

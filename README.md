@@ -212,3 +212,51 @@ z = ifthenelse(f, g, h)
 ```
 
 If the output of f has 1, the output of z is the same as the output of g. Ohterwise, if the output of f has 0, the output of z is the same as the output of h.
+
+#### Travere BDD
+
+In several BDD-based algorithms, we should traverse the BDD. The package provides the following types and functions to traverse the BDD.
+
+- Types
+    - `NodeID`: Type for node id
+    - `Level`: Type for node level
+    - `AbstractNode`: An abstract type for a node
+    - `AbstractNonTerminalNode <: AbstractNode`: An abstract type for a non-terminal node
+    - `AbstractTerminalNode <: AbstractNode`: An abstract type for a terminal node
+- Functions
+    - `id(x)`: Get the ID of a node.
+    - `level(x)`: Get a level of a node or a header.
+    - `label(x)`: Get a symbol as a label of a node or a header.
+    - `get_zero(x::AbstractNonTerminalNode)`: Get a node by following the 0-edge of a given node.
+    - `get_one(x::AbstractNonTerminalNode)`: Get a node by following the 1-edge of a given node.
+    - `iszero(x::AbstractNode)`: Return a boolean value if x is the 0-terminal node. If x is a non-terminal node, the function always returns false.
+    - `isone(x::AbstractNode)`: Return a boolean value if x is the 1-terminal node. If x is a non-terminal node, the function always returns false.
+
+For example, we present the code to convert a sparse matrix:
+```julia
+function tomat(x::AbstractNode)
+    visited = Set{NodeID}([])
+    results = Tuple{Int,Int}[]
+    _tomat(x, visited, results)
+    results
+end
+
+function _tomat(x::AbstractNonTerminalNode, visited, results)
+    if !in(id(x), visited)
+        b0 = get_zero(x)
+        push!(results, (id(x), id(b0)))
+        _tomat(b0, visited, results)
+        b1 = get_one(x)
+        push!(results, (id(x), id(b1)))
+        _tomat(get_one(x), visited, results)
+        push!(visited, id(x))
+    end
+end
+
+function _tomat(x::AbstractTerminalNode, visited, results)
+    if !in(id(x), visited)
+        push!(visited, id(x))
+    end
+end
+```
+

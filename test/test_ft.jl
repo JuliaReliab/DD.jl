@@ -159,5 +159,44 @@ end
     println(res)
 end
 
+function tomat(x::AbstractNode)
+    visited = Set{NodeID}([])
+    results = Tuple{Int,Int}[]
+    _tomat(x, visited, results)
+    results
+end
+
+function _tomat(x::AbstractNonTerminalNode, visited, results)
+    if !in(id(x), visited)
+        b0 = get_zero(x)
+        push!(results, (id(x), id(b0)))
+        _tomat(b0, visited, results)
+        b1 = get_one(x)
+        push!(results, (id(x), id(b1)))
+        _tomat(get_one(x), visited, results)
+        push!(visited, id(x))
+    end
+end
+
+function _tomat(x::AbstractTerminalNode, visited, results)
+    if !in(id(x), visited)
+        push!(visited, id(x))
+    end
+end
+
+@testset "FT5" begin
+    b = bdd()
+    defvar!(b, :x, 1)
+    defvar!(b, :y, 2)
+    defvar!(b, :z, 3)
+    x = var!(b, :x)
+    y = var!(b, :y)
+    z = var!(b, :z)
+
+    f = (x + y) * z + x
+
+    println(tomat(f))
+end
+
 end
 

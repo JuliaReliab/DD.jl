@@ -7,6 +7,8 @@ module BDD
 export AbstractNode
 export AbstractNonTerminalNode
 export AbstractTerminalNode
+export NodeID
+export Level
 export FullyReduced
 export QuasiReduced
 
@@ -14,6 +16,7 @@ export bdd
 export forest
 export get_zero
 export get_one
+export id
 export level
 export label
 
@@ -68,7 +71,7 @@ const NodeID = UInt
 
 The type for node level.
 """
-const Level = Int
+const Level = UInt
 
 """
     AbstractOperator
@@ -269,6 +272,20 @@ Get a node of high.
 """
 function get_one(x::AbstractNonTerminalNode)
     x.high
+end
+
+"""
+    id(x::NodeHearder)
+    id(x::AbstractNode)
+
+Get an ID
+"""
+function id(x::NodeHeader)
+    x.id
+end
+
+function id(x::AbstractNode)
+    x.id
 end
 
 """

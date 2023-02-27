@@ -3,8 +3,6 @@ module FTTest
 using DD.BDD
 using Test
 
-import DD.BDD: node
-
 @testset "FT1" begin
     function prob(f::AbstractNonTerminalNode, pb)
         x = label(f)

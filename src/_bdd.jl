@@ -19,10 +19,12 @@ export get_one
 export id
 export level
 export label
+export node!
 
 export defvar!
 export var!
-export todot
+export genfunc!
+
 export not, not!
 export and, and!
 export or, or!
@@ -32,7 +34,7 @@ export neq, neq!
 export imp, imp!
 export ifthenelse, ifthenelse!
 
-export genfunc!
+export todot
 
 """
     AbstractNode
@@ -223,7 +225,7 @@ mutable struct Node <: AbstractNonTerminalNode
 end
 
 """
-    node(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode)
+    node!(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode)
 
 Constructor of Node. If there exists any node which has same children in the same level,
 the function returns the exisiting node. In addition, if the policy of forest is the FullyReduced,
@@ -233,11 +235,42 @@ the nodes with same directions are reduced.
 - low: Low node
 - high: High node
 """
-function node(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode)
-    node(b, h, low, high, b.policy)
+function node!(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode)
+    _node!(b, h, low, high, b.policy)
 end
 
-function node(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode, ::FullyReduced)
+"""
+    node!(b::Forest, x::Symbol, low::AbstractNode, high::AbstractNode)
+    node!(b::Forest, x::Symbol, low::Bool, high::AbstractNode)
+    node!(b::Forest, x::Symbol, low::AbstractNode, high::Bool)
+    node!(b::Forest, x::Symbol, low::Bool, high::Bool)
+
+Constructor of Node.
+- x: Symbol of variable
+- low: Low node
+- high: High node
+"""
+function node!(b::Forest, x::Symbol, low::AbstractNode, high::AbstractNode)
+    h = b.headers[x]
+    _node!(b, h, low, high, b.policy)
+end
+
+function node!(b::Forest, x::Symbol, low::Bool, high::AbstractNode)
+    h = b.headers[x]
+    _node!(b, h, Terminal(b, low), high, b.policy)
+end
+
+function node!(b::Forest, x::Symbol, low::AbstractNode, high::Bool)
+    h = b.headers[x]
+    _node!(b, h, low, Terminal(b, high), b.policy)
+end
+
+function node!(b::Forest, x::Symbol, low::Bool, high::Bool)
+    h = b.headers[x]
+    _node!(b, h, Terminal(b, low), Terminal(b, high), b.policy)
+end
+
+function _node!(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode, ::FullyReduced)
     if low.id == high.id
         return low
     end
@@ -248,7 +281,7 @@ function node(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode, :
     end
 end
 
-function node(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode, ::QuasiReduced)
+function _node!(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode, ::QuasiReduced)
     key = (h.id, low.id, high.id)
     get(b.utable, key) do
         id = _get_next!(b.mgr)
@@ -424,7 +457,7 @@ function _apply!(b::Forest, op::AbstractUnaryOperator, f::AbstractNonTerminalNod
     get!(b.cache, key) do
         low = _apply!(b, op, f.low)
         high = _apply!(b, op, f.high)
-        node(b, f.header, low, high)
+        node!(b, f.header, low, high)
     end
 end
 
@@ -434,15 +467,15 @@ function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNo
         if f.header.level > g.header.level
             low = _apply!(b, op, f.low, g)
             high = _apply!(b, op, f.high, g)
-            ans = node(b, f.header, low, high)
+            ans = node!(b, f.header, low, high)
         elseif f.header.level < g.header.level
             low = _apply!(b, op, f, g.low)
             high = _apply!(b, op, f, g.high)
-            ans = node(b, g.header, low, high)
+            ans = node!(b, g.header, low, high)
         else
             low = _apply!(b, op, f.low, g.low)
             high = _apply!(b, op, f.high, g.high)
-            ans = node(b, f.header, low, high)
+            ans = node!(b, f.header, low, high)
         end
         b.cache[key] = ans
     end
@@ -453,7 +486,7 @@ function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractTerminalNode,
     get(b.cache, key) do
         low = _apply!(b, op, f, g.low)
         high = _apply!(b, op, f, g.high)
-        ans = node(b, g.header, low, high)
+        ans = node!(b, g.header, low, high)
         b.cache[key] = ans
     end
 end
@@ -463,7 +496,7 @@ function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNo
     get(b.cache, key) do
         low = _apply!(b, op, f.low, g)
         high = _apply!(b, op, f.high, g)
-        ans = node(b, f.header, low, high)
+        ans = node!(b, f.header, low, high)
         b.cache[key] = ans
     end
 end
@@ -487,15 +520,15 @@ function _apply!(b::Forest, op::EqOperator, f::AbstractNonTerminalNode, g::Abstr
         if f.header.level > g.header.level
             low = _apply!(b, op, f.low, g)
             high = _apply!(b, op, f.high, g)
-            ans = node(b, f.header, low, high)
+            ans = node!(b, f.header, low, high)
         elseif f.header.level < g.header.level
             low = _apply!(b, op, f, g.low)
             high = _apply!(b, op, f, g.high)
-            ans = node(b, g.header, low, high)
+            ans = node!(b, g.header, low, high)
         else
             low = _apply!(b, op, f.low, g.low)
             high = _apply!(b, op, f.high, g.high)
-            ans = node(b, f.header, low, high)
+            ans = node!(b, f.header, low, high)
         end
         b.cache[key] = ans
     end
@@ -509,7 +542,7 @@ function _apply!(b::Forest, op::EqOperator, f::AbstractTerminalNode, g::Abstract
     get(b.cache, key) do
         low = _apply!(b, op, f, g.low)
         high = _apply!(b, op, f, g.high)
-        ans = node(b, g.header, low, high)
+        ans = node!(b, g.header, low, high)
         b.cache[key] = ans
     end
 end
@@ -522,7 +555,7 @@ function _apply!(b::Forest, op::EqOperator, f::AbstractNonTerminalNode, g::Abstr
     get(b.cache, key) do
         low = _apply!(b, op, f.low, g)
         high = _apply!(b, op, f.high, g)
-        ans = node(b, f.header, low, high)
+        ans = node!(b, f.header, low, high)
         b.cache[key] = ans
     end
 end
@@ -665,7 +698,7 @@ end
 
 function var!(b::Forest, name::Symbol, ::FullyReduced)
     h = b.headers[name]
-    node(b, h, Terminal(b, false), Terminal(b, true))
+    node!(b, h, Terminal(b, false), Terminal(b, true))
 end
 
 function var!(b::Forest, name::Symbol, ::QuasiReduced)
@@ -675,10 +708,10 @@ function var!(b::Forest, name::Symbol, ::QuasiReduced)
     fone = b.one
     for x = hs
         if x.level < h.level
-            fzero = node(b, x, fzero, fzero)
-            fone = node(b, x, fone, fone)
+            fzero = node!(b, x, fzero, fzero)
+            fone = node!(b, x, fone, fone)
         else
-            fzero = node(b, x, fzero, fone)
+            fzero = node!(b, x, fzero, fone)
             fone = fzero
         end
     end

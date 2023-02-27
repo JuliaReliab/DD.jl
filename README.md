@@ -260,3 +260,11 @@ function _tomat(x::AbstractTerminalNode, visited, results)
 end
 ```
 
+#### Make funcitons by manuplating BDD tree.
+
+The function (BDD tree) can be created by using the function `node!`.
+
+- `node!(b::Forest, x::Symbol, low, high)`: Make a non-terminal node having two children `low` (0-edge) and `high` (1-edge).
+
+Note that this function do not care the level of variables. The levels of low and high nodes should be lower than the level of the node created by `node!`.
+

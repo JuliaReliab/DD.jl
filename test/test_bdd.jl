@@ -3,8 +3,6 @@ module BDDTest
 using DD.BDD
 using Test
 
-import DD.BDD: node
-
 @testset "BDD1" begin
     b = bdd()
     defvar!(b, :x, 1)
@@ -26,10 +24,23 @@ end
     z = and(x, y)
     println(todot(z))
 
-    tmp = node(b, x.header, b.zero, b.one)
-    tmp = node(b, y.header, b.zero, tmp)
+    tmp = node!(b, x.header, b.zero, b.one)
+    tmp = node!(b, y.header, b.zero, tmp)
     @test z.id == tmp.id
+end
 
+@testset "BDD2-2" begin
+    b = bdd()
+    defvar!(b, :x, 1)
+    defvar!(b, :y, 2)
+    x = var!(b, :x)
+    y = var!(b, :y)
+    z = and(x, y)
+    println(todot(z))
+
+    tmp = node!(b, :x, false, true)
+    tmp = node!(b, :y, false, tmp)
+    @test z.id == tmp.id
 end
 
 @testset "BDD3" begin
@@ -41,8 +52,8 @@ end
     z = or(x, y)
     println(todot(z))
 
-    tmp = node(b, x.header, b.zero, b.one)
-    tmp = node(b, y.header, tmp, b.one)
+    tmp = node!(b, x.header, b.zero, b.one)
+    tmp = node!(b, y.header, tmp, b.one)
     @test z.id == tmp.id
 end
 

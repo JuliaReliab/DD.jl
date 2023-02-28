@@ -165,5 +165,22 @@ end
     println(todot(x))
 end
 
+@testset "BDD12" begin
+    b = bdd()
+    defvar!(b, :x, 1)
+    defvar!(b, :y, 2)
+    defvar!(b, :z, 3)
+    f = [
+        [false, false, true],
+        [false, true, false],
+        [true, false, false],
+        [true, false, true],
+        [true, true, false]
+    ]
+    x = genfunc!(b, f)
+    h = Dict([k => level(v) for (k,v) = vars(b)])
+    println(h)
+end
+
 end
 

@@ -13,6 +13,7 @@ export FullyReduced
 export QuasiReduced
 
 export bdd
+export vars
 export forest
 export get_zero
 export get_one
@@ -197,13 +198,12 @@ function Base.show(io::IO, b::Forest)
 end
 
 """
-    get_headers(b::Forest)
+   vars(f)
 
-Get a vector of headers sorted by level.
+Return the node hederes
 """
-function get_headers(b::Forest)
-    hs = collect(values(b.headers))
-    sort(hs, by = x -> x.level)
+function vars(b::Forest)
+    b.headers
 end
 
 """
@@ -290,7 +290,7 @@ function _node!(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode,
 end
 
 """
-    zero(x::AbstractNonTerminalNode)
+    get_zero(x::AbstractNonTerminalNode)
 
 Get a node of low.
 """
@@ -299,7 +299,7 @@ function get_zero(x::AbstractNonTerminalNode)
 end
 
 """
-    one(x::AbstractNonTerminalNode)
+    get_one(x::AbstractNonTerminalNode)
 
 Get a node of high.
 """
@@ -703,7 +703,8 @@ end
 
 function var!(b::Forest, name::Symbol, ::QuasiReduced)
     h = b.headers[name]
-    hs = get_headers(b)
+    hs = collect(values(b.headers))
+    sort!(hs, by = x -> x.level)
     fzero = b.zero
     fone = b.one
     for x = hs

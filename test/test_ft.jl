@@ -66,6 +66,30 @@ function findminpath(f::AbstractTerminalNode, path::Vector{Bool}, s::MinPath)
     nothing
 end
 
+function findmaxpath(f::AbstractNonTerminalNode, path::Vector{Bool}, s::MinPath)
+    if s.len > sum(path)
+        return
+    end
+    path[level(f)] = true
+    findmaxpath(get_one(f), path, s)
+    path[level(f)] = false
+    findmaxpath(get_zero(f), path, s)
+    path[level(f)] = true
+    nothing
+end
+
+function findmaxpath(f::AbstractTerminalNode, path::Vector{Bool}, s::MinPath)
+    if iszero(f)
+        if s.len < sum(path)
+            s.len = sum(path)
+            s.set = [copy(path)]
+        elseif s.len == sum(path)
+            push!(s.set, copy(path))
+        end
+    end
+    nothing
+end
+
 @testset "FT2" begin
     b = bdd()
     defvar!(b, :x, 1)
@@ -85,15 +109,34 @@ end
     println(s)
 end
 
+@testset "FT2-2" begin
+    b = bdd()
+    defvar!(b, :x, 1)
+    defvar!(b, :y, 2)
+    defvar!(b, :z, 3)
+    x = var!(b, :x)
+    y = var!(b, :y)
+    z = var!(b, :z)
+
+    f = (x + y) * z
+
+    println(todot(f))
+
+    path = [true for _ = b.headers]
+    s = MinPath(0, Vector{Bool}[])
+    findmaxpath(f, path, s)
+    println("maxpath", s)
+end
+
 function mcs(b, f, vars, labels)
     path = [false for _ = vars]
     s = MinPath(length(vars), Vector{Bool}[])
     findminpath(f, path, s)
 
-    mp = false
+    mp = b.zero
     result = Vector{Symbol}[]
     for x = s.set
-        tmp = true
+        tmp = b.one
         tmp2 = Symbol[]
         for (i,v) = enumerate(x)
             if v == true
@@ -194,6 +237,60 @@ end
     f = (x + y) * z + x
 
     println(tomat(f))
+end
+
+function mps(b, f, vars, labels)
+    path = [true for _ = vars]
+    s = MinPath(0, Vector{Bool}[])
+    findmaxpath(f, path, s)
+
+    mp = b.zero
+    result = Vector{Symbol}[]
+    for x = s.set
+        tmp = b.zero
+        tmp2 = Symbol[]
+        for (i,v) = enumerate(x)
+            if v == false
+                tmp = and(tmp, not(vars[i]))
+            else
+                push!(tmp2, labels[i])
+            end
+        end
+        mp = or(mp, tmp)
+        push!(result, tmp2)
+    end
+    result, imp(mp, f)
+end
+
+function mps(b, f)
+    vars = Dict([level(x) => var!(b, k) for (k,x) = b.headers]...)
+    labels = Dict([level(x) => k for (k,x) = b.headers]...)
+
+    result = []
+    while !isone(f)
+        tmp, f = mps(b, f, vars, labels)
+        push!(result, tmp...)
+    end
+    result
+end
+
+@testset "FT4-2" begin
+    b = bdd()
+    defvar!(b, :A, 1)
+    defvar!(b, :B, 2)
+    defvar!(b, :C, 3)
+    A = var!(b, :A)
+    B = var!(b, :B)
+    C = var!(b, :C)
+
+    f = (A + B) * C
+
+    println(todot(f))
+    res = mcs(b, f)
+    println("4-2", res)
+
+    res = mps(b, f)
+    println("4-2", res)
 end
 
 end

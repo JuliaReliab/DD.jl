@@ -150,6 +150,31 @@ function mcs(b, f, vars, labels)
     result, not(imp(f, mp))
 end
 
+# function mcs(b, f, vars, labels)
+#     path = [false for _ = vars]
+#     s = MinPath(length(vars), Vector{Bool}[])
+#     findminpath(f, path, s)
+
+#     mp = b.zero
+#     result = Vector{Symbol}[]
+#     for x = s.set
+#         tmp = b.one
+#         tmp2 = Symbol[]
+#         for (i,v) = enumerate(x)
+#             if v == true
+#                 tmp = and(tmp, vars[i])
+#                 push!(tmp2, labels[i])
+#             else
+#                 tmp = and(tmp, not(vars[i]))
+#                 push!(tmp2, Symbol("~", labels[i]))
+#             end
+#         end
+#         mp = or(mp, tmp)
+#         push!(result, tmp2)
+#     end
+#     result, not(imp(f, mp))
+# end
+
 function mcs(b, f)
     vars = Dict([level(x) => var!(b, k) for (k,x) = b.headers]...)
     labels = Dict([level(x) => k for (k,x) = b.headers]...)
@@ -244,23 +269,49 @@ function mps(b, f, vars, labels)
     s = MinPath(0, Vector{Bool}[])
     findmaxpath(f, path, s)
 
-    mp = b.zero
+    mp = b.one
     result = Vector{Symbol}[]
     for x = s.set
         tmp = b.zero
         tmp2 = Symbol[]
         for (i,v) = enumerate(x)
-            if v == false
-                tmp = and(tmp, not(vars[i]))
-            else
+            if v == true
                 push!(tmp2, labels[i])
+            else
+                tmp = or(tmp, vars[i])
             end
         end
-        mp = or(mp, tmp)
+        mp = and(mp, tmp)
         push!(result, tmp2)
     end
     result, imp(mp, f)
 end
+
+# function mps(b, f, vars, labels)
+#     path = [true for _ = vars]
+#     s = MinPath(0, Vector{Bool}[])
+#     findmaxpath(f, path, s)
+
+#     mp = b.one
+#     result = Vector{Symbol}[]
+#     for x = s.set
+#         tmp = b.zero
+#         tmp2 = Symbol[]
+#         for (i,v) = enumerate(x)
+#             if v == true
+#                 push!(tmp2, labels[i])
+#                 tmp = or(tmp, not(vars[i]))
+#             else
+#                 tmp = or(tmp, vars[i])
+#             end
+#         end
+#         mp = and(mp, tmp)
+#         push!(result, tmp2)
+#     end
+#     println("*******:")
+#     println(todot(mp))
+#     result, imp(mp, f)
+# end
 
 function mps(b, f)
     vars = Dict([level(x) => var!(b, k) for (k,x) = b.headers]...)
@@ -283,14 +334,33 @@ end
     B = var!(b, :B)
     C = var!(b, :C)
 
-    f = (A + B) * C
+    f = A + B * C
 
     println(todot(f))
     res = mcs(b, f)
-    println("4-2", res)
+    println("MCS ", res)
 
     res = mps(b, f)
-    println("4-2", res)
+    println("MPS ", res)
+end
+
+@testset "FT4-3" begin
+    b = bdd()
+    defvar!(b, :A, 1)
+    defvar!(b, :B, 2)
+    defvar!(b, :C, 3)
+    A = var!(b, :A)
+    B = var!(b, :B)
+    C = var!(b, :C)
+
+    f = xor(A, B * C)
+
+    println(todot(f))
+    res = mcs(b, f)
+    println("MCS ", res)
+
+    res = mps(b, f)
+    println("MPS ", res)
 end
 
 end

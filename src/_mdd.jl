@@ -4,84 +4,159 @@ MDD Module
 
 module MDD
 
-import Base
-#export bdd, header!, var!, node!, not, and, or, xor, imp, ite, todot
+export AbstractNode
+export AbstractNonTerminalNode
+export AbstractTerminalNode
+export NodeID
+export Level
+export FullyReduced
+export QuasiReduced
 
-export
-    lt!,
-    lte!,
-    gt!,
-    gte!,
-    eq!,
-    neq!,
-    plus!,
-    minus!,
-    mul!,
-    max!,
-    min!,
-    and,
-    or,
-    and!,
-    or!,
-    not!,
-    todot,
-    size,
-    ifthenelse!,
-    ifthenelse,
-    @match,
-    var!,
-    mdd
+export mdd
+export vars
+export forest
+export get_nodes
+export id
+export level
+export label
+export domain
+export node!
+export value!
+
+export defvar!
+export var!
+
+export lt!
+export lte!
+export gt!
+export gte!
+export eq!
+export neq!
+export plus!
+export minus!
+export mul!
+export max!
+export min!
+export not!
+export and!, and
+export or!, or
+export ifthenelse!, ifthenelse
+
+export todot
+
+export @match
 
 """
-AbstractNode
+    AbstractNode
 
-An abstract node for BDD. The parameter Ts represents a type for a symbol of variable.
-Ts is usually Symbol.
+Abstract tyoe for BDD node.
 """
-
 abstract type AbstractNode end
-abstract type AbstractTerminal <: AbstractNode end
+
+"""
+    AbstractNonTerminalNode
+
+Abstract type for non-terminal node.
+"""
+abstract type AbstractNonTerminalNode <: AbstractNode end
+
+"""
+    AbstractTerminalNode
+
+Abstract type for terminal node.
+"""
+abstract type AbstractTerminalNode <: AbstractNode end
 
 function Base.show(io::IO, n::AbstractNode)
     Base.show(io, "node$(n.id)")
 end
 
 """
-type alias
+    NodeID
+
+The identity number for node. This is issued by Forest.
 """
-
 const NodeID = UInt
-const LevelT = Int
-const ValueT = Int
 
+"""
+    Level
+
+The type for node level.
+"""
+const Level = UInt
+
+"""
+    Value
+
+The type for value.
+"""
+const Value = Int
+
+"""
+    AbstractOperator
+    AbstractUnaryOperator <: AbstractOperator
+    AbstractBinaryOperator <: AbstractOperator
+    NotOperator <: AbstractUnaryOperator
+    AndOperator <: AbstractBinaryOperator
+    OrOperator <: AbstractBinaryOperator
+    XorOperator <: AbstractBinaryOperator
+    EqOperator <: AbstractBinaryOperator
+
+Types for operations.
+- NotOperator: Logical not operation
+- AndOperator: Logical and operation
+- OrOperator: Logical or operation
+- XorOperator: Logical xor operation
+- EqOperator: Logical eq operation
+"""
 abstract type AbstractOperator end
+abstract type AbstractUnaryOperator <: AbstractOperator end
+abstract type AbstractBinaryOperator <: AbstractOperator end
+struct MDDMin <: AbstractBinaryOperator end
+struct MDDMax <: AbstractBinaryOperator end
+struct MDDPlus <: AbstractBinaryOperator end
+struct MDDMinus <: AbstractBinaryOperator end
+struct MDDMul <: AbstractBinaryOperator end
+struct MDDLte <: AbstractBinaryOperator end
+struct MDDLt <: AbstractBinaryOperator end
+struct MDDGte <: AbstractBinaryOperator end
+struct MDDGt <: AbstractBinaryOperator end
+struct MDDEq <: AbstractBinaryOperator end
+struct MDDNeq <: AbstractBinaryOperator end
+struct MDDAnd <: AbstractBinaryOperator end
+struct MDDOr <: AbstractBinaryOperator end
+struct MDDNot <: AbstractUnaryOperator end
+struct MDDIf <: AbstractBinaryOperator end
+struct MDDElse <: AbstractBinaryOperator end
+struct MDDUnion <: AbstractBinaryOperator end
 
-struct MDDMin <: AbstractOperator end
-struct MDDMax <: AbstractOperator end
+"""
+    AbstractPolicy
+    FullyReduced <: AbstractPolicy
+    QuasiReduced <: AbstractPolicy
 
-struct MDDPlus <: AbstractOperator end
-struct MDDMinus <: AbstractOperator end
-struct MDDMul <: AbstractOperator end
+The types for reduction policy in DD.
+- FullyReduced: the node is reduced if all the edges are directed to the same node.
+- QuasiReduced: the node is not reduced even if all the edges are directed to the same node.
+"""
+abstract type AbstractPolicy end
+struct FullyReduced <: AbstractPolicy end
+struct QuasiReduced <: AbstractPolicy end
 
-struct MDDLte <: AbstractOperator end
-struct MDDLt <: AbstractOperator end
-struct MDDGte <: AbstractOperator end
-struct MDDGt <: AbstractOperator end
-struct MDDEq <: AbstractOperator end
-struct MDDNeq <: AbstractOperator end
+"""
+    NodeManager
 
-struct MDDAnd <: AbstractOperator end
-struct MDDOr <: AbstractOperator end
-struct MDDNot <: AbstractOperator end
-
-struct MDDIf <: AbstractOperator end
-struct MDDElse <: AbstractOperator end
-struct MDDUnion <: AbstractOperator end
-
+A mutable structure to issue the unique number as ID.
+"""
 mutable struct NodeManager
     nextid::NodeID
 end
 
+"""
+    _get_next!(mgr::NodeManager)::NodeID
+
+Issue an ID.
+"""
 function _get_next!(mgr::NodeManager)::NodeID
     id = mgr.nextid
     mgr.nextid += 1
@@ -89,72 +164,220 @@ function _get_next!(mgr::NodeManager)::NodeID
 end
 
 """
-Forest
+    NodeHeader
 
-A structure to store the information on DD.
-
-Todo: Get rid of `mutable` (export `totalnodeid` to BDDNodeManager?)
+A mutable structure indicating the information for nodes in the same level.
+- id: Header ID
+- level: Level of node. The level of terminal node is 0. 
+- label: A symbol to represent the variable
+- domain: A vector as the domain of variable
+- index: A dictionary to provide the index for a given value.
 """
+mutable struct NodeHeader
+    id::NodeID
+    level::Level
+    label::Symbol
+    domain::Vector{Value}
+    index::Dict{Value,Int}
 
-mutable struct MDDForest
+    # function NodeHeader(level::Level, domain::Value)
+    #     new(NodeID(level), level, Symbol(level), [i for i = 1:domain])
+    # end
+
+    function NodeHeader(id::NodeID, level::Level, label::Symbol, domain::Vector{Value})
+        new(id, level, label, domain, Dict([x => i for (i,x) = enumerate(domain)]...))
+    end
+end
+
+"""
+    Forest
+
+A mutable structure to store the information on DD. The fields are
+- mgr: NodeManager to issue IDs of nodes
+- hmgr: NodeManager to issue IDs of headers
+- headers: A dictionary of the pair of Symbol and NodeHeader
+- utable: Unique table to identify the tuple (header id, low node id, high node id)
+- zero: A terminal node indicating logical zero
+- one: A terminal node indicating logical one
+- undet: A terminal node indicating logical undermined value
+- cache: A cache for operations
+"""
+mutable struct Forest
     mgr::NodeManager
     hmgr::NodeManager
+    headers::Dict{Symbol,NodeHeader}
     utable::Dict{Tuple{NodeID,Vector{NodeID}},AbstractNode}
-    vtable::Dict{ValueT,AbstractNode}
-    zero::AbstractTerminal
-    one::AbstractTerminal
-    undetermined::AbstractTerminal
+    vtable::Dict{Value,AbstractNode}
+    zero::AbstractTerminalNode
+    one::AbstractTerminalNode
+    undet::AbstractTerminalNode
     cache::Dict{Tuple{AbstractOperator,NodeID,NodeID},AbstractNode}
+    policy::AbstractPolicy
 
-    function MDDForest()
+    function Forest(policy::AbstractPolicy)
         b = new()
         b.mgr = NodeManager(0)
         b.hmgr = NodeManager(0)
+        b.headers = Dict{Symbol,NodeHeader}()
         b.utable = Dict{Tuple{NodeID,Vector{NodeID}},AbstractNode}()
-        b.vtable = Dict{ValueT,AbstractNode}()
+        b.vtable = Dict{Value,AbstractNode}()
         b.zero = Terminal{Bool}(b, _get_next!(b.mgr), false)
         b.one = Terminal{Bool}(b, _get_next!(b.mgr), true)
-        b.undetermined = Terminal{Nothing}(b, _get_next!(b.mgr), nothing)
+        b.undet = Terminal{Nothing}(b, _get_next!(b.mgr), nothing)
         b.cache = Dict{Tuple{AbstractOperator,NodeID,NodeID},AbstractNode}()
+        b.policy = policy
         b
     end
 end
 
-"""
-struct
-"""
-
-mutable struct NodeHeader
-    id::NodeID
-    level::LevelT
-    label::Symbol
-    domains::Vector{ValueT}
-    index::Dict{ValueT,Int}
-
-    function NodeHeader(level::LevelT, domain::ValueT)
-        NodeHeader(NodeID(level), level, Symbol(level), [i for i = 1:domain])
-    end
-
-    function NodeHeader(id::NodeID, level::LevelT, label::Symbol, domains::Vector{ValueT})
-        new(id, level, label, domains, Dict([x => i for (i,x) = enumerate(domains)]...))
-    end
+function Base.show(io::IO, b::Forest)
+    Base.show(io, "Total nodes $(b.mgr.nextid)")
+    Base.show(io, "Total headers $(b.hmgr.nextid)")
+    Base.show(io, "Length of unique table $(length(b.utable))")
+    Base.show(io, "Length of cache $(length(b.cache))")
+    Base.show(io, "Policy $(b.policy)")
 end
 
-mutable struct Node <: AbstractNode
-    b::MDDForest
+"""
+   vars(f)
+
+Return the node hederes
+"""
+function vars(b::Forest)
+    b.headers
+end
+
+"""
+    Node <: AbstractNonTerminalNode
+
+A structure for a DD node.
+- b: The forest that the node belogs to.
+- id: Unique ID
+- header: An instance of header class
+- nodes: Vector of children
+"""
+mutable struct Node <: AbstractNonTerminalNode
+    b::Forest
     id::NodeID
     header::NodeHeader
     nodes::Vector{AbstractNode}
+end
 
-    function Node(b::MDDForest, h::NodeHeader, nodes::Vector{AbstractNode})
-        if _issame(nodes)
-            return nodes[1]
-        end
-        key = (h.id, [x.id for x = nodes])
-        get(b.utable, key) do
-            id = _get_next!(b.mgr)
-            b.utable[key] = new(b, id, h, nodes)
-        end
+"""
+    get_nodes(x::AbstractNonTerminalNode)
+
+Get a node vector
+"""
+function get_nodes(x::AbstractNonTerminalNode)
+    x.nodes
+end
+
+"""
+    id(x::NodeHearder)
+    id(x::AbstractNode)
+
+Get an ID
+"""
+function id(x::NodeHeader)
+    x.id
+end
+
+function id(x::AbstractNode)
+    x.id
+end
+
+"""
+    level(x::NodeHearder)
+    level(x::AbstractNonTerminalNode)
+    level(x::AbstractTerminalNode)
+
+Get a level
+"""
+function level(x::NodeHeader)
+    x.level
+end
+
+function level(x::AbstractNonTerminalNode)
+    x.header.level
+end
+
+function level(x::AbstractTerminalNode)
+    Level(0)
+end
+
+"""
+    label(x::NodeHeader)
+    label(x::AbstractNonTerminalNode)
+    label(x::AbstractTerminalNode)
+
+Get a label
+"""
+function label(x::NodeHeader)
+    x.label
+end
+
+function label(x::AbstractNonTerminalNode)
+    x.header.label
+end
+
+function label(x::AbstractTerminalNode)
+    Symbol(x.value)
+end
+
+"""
+    domain(x::NodeHeader)
+    domain(x::AbstractNonTerminalNode)
+    domain(x::AbstractTerminalNode)
+
+Get a domain
+"""
+function domain(x::NodeHeader)
+    x.domain
+end
+
+function domain(x::AbstractNonTerminalNode)
+    x.header.domain
+end
+
+# function domain(x::AbstractTerminalNode)
+#     b = forest(x)
+#     sort(keys(b.vtable))
+# end
+
+"""
+    node!(b::Forest, h::NodeHeader, nodes::Vector{AbstractNode})
+
+Constructor of Node. If there exists any node which has same children in the same level,
+the function returns the exisiting node. In addition, if the policy of forest is the FullyReduced,
+the nodes with same directions are reduced.
+- b: Forest
+- h: NodeHeader
+- nodes: A vector of nodes
+"""
+function node!(b::Forest, h::NodeHeader, nodes::Vector{AbstractNode})
+    _node!(b, h, nodes, b.policy)
+end
+
+"""
+    node!(b::Forest, x::Symbol, nodes::Vector{AbstractNode})
+
+Constructor of Node.
+- x: Symbol of variable
+- nodes: A vector of nodes
+"""
+function node!(b::Forest, x::Symbol, nodes::Vector{AbstractNode})
+    h = b.headers[x]
+    _node!(b, h, nodes, b.policy)
+end
+
+function _node!(b::Forest, h::NodeHeader, nodes::Vector{AbstractNode}, ::FullyReduced)
+    if _issame(nodes)
+        return nodes[1]
+    end
+    key = (h.id, [x.id for x = nodes])
+    get(b.utable, key) do
+        id = _get_next!(b.mgr)
+        b.utable[key] = Node(b, id, h, nodes)
     end
 end
 
@@ -169,20 +392,32 @@ function _issame(nodes::Vector{AbstractNode})
     return true
 end
 
-struct Terminal{Tv} <: AbstractTerminal
-    b::MDDForest
+"""
+    Terminal{Tv} <: AbstractTerminalNode
+
+A structure of Terminal node.
+"""
+struct Terminal{Tv} <: AbstractTerminalNode
+    b::Forest
     id::NodeID
     value::Tv
 end
 
-function Terminal(b::MDDForest, value::ValueT)
+"""
+    value!(b::Forest, value::Value)
+    value!(b::Forest, value::Bool)
+    value!(b::Forest, value::Nothing)
+
+The constructor of terminal. The value is an integer, boolean or nothing value.
+"""
+function value!(b::Forest, value::Value)
     get(b.vtable, value) do
         id = _get_next!(b.mgr)
-        b.vtable[value] = Terminal{ValueT}(b, id, value)
+        b.vtable[value] = Terminal{Value}(b, id, value)
     end
 end
 
-function Terminal(b::MDDForest, value::Bool)
+function value!(b::Forest, value::Bool)
     if value == true
         b.one
     else
@@ -190,276 +425,337 @@ function Terminal(b::MDDForest, value::Bool)
     end
 end
 
-function Terminal(b::MDDForest, value::Nothing)
-    b.undetermined
+function value!(b::Forest, ::Nothing)
+    b.undet
 end
 
-function getdd(f::AbstractNode)
+"""
+    iszero(x::AbstractNode)
+
+Return a boolean value if the terminal is zero.
+"""
+function Base.iszero(x::AbstractNonTerminalNode)
+    false
+end
+
+function Base.iszero(x::Terminal{Value})
+    false
+end
+
+function Base.iszero(x::Terminal{Bool})
+    x.value == false
+end
+
+function Base.iszero(x::Terminal{Nothing})
+    false
+end
+
+"""
+    isone(x::AbstractNode)
+
+Return a boolean value if the terminal is one.
+"""
+function Base.isone(x::AbstractNonTerminalNode)
+    false
+end
+
+function Base.isone(x::Terminal{Value})
+    false
+end
+
+function Base.isone(x::Terminal{Bool})
+    x.value == true
+end
+
+function Base.isone(x::Terminal{Nothing})
+    false
+end
+
+"""
+    isnothing(x::AbstractNode)
+
+Return a boolean value if the terminal is one.
+"""
+function Base.isnothing(x::AbstractNonTerminalNode)
+    false
+end
+
+function Base.isnothing(x::Terminal{Value})
+    false
+end
+
+function Base.isnothing(x::Terminal{Bool})
+    false
+end
+
+function Base.isnothing(x::Terminal{Nothing})
+    true
+end
+
+"""
+   forest(f)
+
+Return the forest of a given node
+"""
+function forest(f::AbstractNode)
     f.b
 end
 
 """
-uniapply
+    apply!(b::Forest, op::AbstractUnaryOperator, f::AbstractNode)
+    apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNode, g::AbstractNode)
 
-Apply operation for unioperator
+Return a node as a result for a given operation.
 """
-
-function apply!(b::MDDForest, op::AbstractOperator, f::AbstractNode)
-    return _apply!(b, op, f)
+function apply!(b::Forest, op::AbstractUnaryOperator, f::AbstractNode)
+    _apply!(b, op, f)
 end
 
-function _apply!(b::MDDForest, op::AbstractOperator, f::Node)
+function apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNode, g::AbstractNode)
+    _apply!(b, op, f, g)
+end
+
+for t = [:Value, :Bool, :Nothing]
+    @eval function apply!(b::Forest, op::AbstractUnaryOperator, f::$t)
+        _apply!(b, op, value!(b, f))
+    end
+
+    @eval function apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNode, g::$t)
+        _apply!(b, op, f, value!(b, g))
+    end
+
+    @eval function apply!(b::Forest, op::AbstractBinaryOperator, f::$t, g::AbstractNode)
+        _apply!(b, op, value!(b, f), g)
+    end
+
+    @eval function apply!(b::Forest, op::AbstractBinaryOperator, f::$t, g::$t)
+        _apply!(b, op, value!(b, f), value!(b, g))
+    end
+end
+
+function _apply!(b::Forest, op::AbstractUnaryOperator, f::AbstractNonTerminalNode)
     key = (op, f.id, b.zero.id)
-    get(b.cache, key) do
-        nodes = AbstractNode[_apply!(b, op, f.nodes[i]) for i = eachindex(f.header.domains)]
-        ans = Node(b, f.header, nodes)
-        b.cache[key] = ans
+    get!(b.cache, key) do
+        nodes = AbstractNode[_apply!(b, op, x) for x = f.nodes]
+        node!(b, f.header, nodes)
     end
 end
 
-function _apply!(b::MDDForest, ::MDDNot, f::Terminal{Bool})
-    Terminal(b, !f.value)
-end
-
-"""
-apply
-
-Apply operation for binoperator
-"""
-
-function apply!(b::MDDForest, op::AbstractOperator, f::AbstractNode, g::AbstractNode)
-    return _apply!(b, op, f, g)
-end
-
-function _apply!(b::MDDForest, op::AbstractOperator, f::Node, g::Node)
+function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNode, g::AbstractNonTerminalNode)
     key = (op, f.id, g.id)
-    get(b.cache, key) do
+    get!(b.cache, key) do
         if f.header.level > g.header.level
-            nodes = AbstractNode[_apply!(b, op, f.nodes[i], g) for i = eachindex(f.header.domains)]
-            ans = Node(b, f.header, nodes)
+            nodes = AbstractNode[_apply!(b, op, x, g) for x = f.nodes]
+            node!(b, f.header, nodes)
         elseif f.header.level < g.header.level
-            nodes = AbstractNode[_apply!(b, op, f, g.nodes[i]) for i = eachindex(g.header.domains)]
-            ans = Node(b, g.header, nodes)
+            nodes = AbstractNode[_apply!(b, op, f, x) for x = g.nodes]
+            node!(b, g.header, nodes)
         else
-            nodes = AbstractNode[_apply!(b, op, f.nodes[i], g.nodes[i]) for i = eachindex(f.header.domains)]
-            ans = Node(b, f.header, nodes)
+            nodes = AbstractNode[_apply!(b, op, f.nodes[i], g.nodes[i]) for i = eachindex(f.header.domain)]
+            node!(b, f.header, nodes)
         end
-        b.cache[key] = ans
     end
 end
 
-function _apply!(b::MDDForest, op::AbstractOperator, f::AbstractTerminal, g::Node)
+function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractTerminalNode, g::AbstractNonTerminalNode)
     key = (op, f.id, g.id)
-    get(b.cache, key) do
-        nodes = AbstractNode[_apply!(b, op, f, g.nodes[i]) for i = eachindex(g.header.domains)]
-        ans = Node(b, g.header, nodes)
-        b.cache[key] = ans
+    get!(b.cache, key) do
+        nodes = AbstractNode[_apply!(b, op, f, x) for x = g.nodes]
+        node!(b, g.header, nodes)
     end
 end
 
-function _apply!(b::MDDForest, op::AbstractOperator, f::Node, g::AbstractTerminal)
+function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNode, g::AbstractTerminalNode)
     key = (op, f.id, g.id)
-    get(b.cache, key) do
-        nodes = AbstractNode[_apply!(b, op, f.nodes[i], g) for i = eachindex(f.header.domains)]
-        ans = Node(b, f.header, nodes)
-        b.cache[key] = ans
+    get!(b.cache, key) do
+        nodes = AbstractNode[_apply!(b, op, x, g) for x = f.nodes]
+        node!(b, f.header, nodes)
     end
 end
+
+## Concrete functions
+
+### Logical Not
+
+function _apply!(b::Forest, ::MDDNot, f::Terminal{Bool})
+    value!(b, !f.value)
+end
+
+### for nothing
 
 for op = [:MDDMin, :MDDMax, :MDDPlus, :MDDMinus, :MDDMul, :MDDLte, :MDDLt, :MDDGte, :MDDGt, :MDDEq, :MDDNeq]
-    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{ValueT}, ::Terminal{Nothing})
-        b.undetermined
+    @eval function _apply!(b::Forest, ::$op, ::Terminal{Value}, ::Terminal{Nothing})
+        b.undet
     end
-    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Nothing}, ::Terminal{ValueT})
-        b.undetermined
+    @eval function _apply!(b::Forest, ::$op, ::Terminal{Nothing}, ::Terminal{Value})
+        b.undet
     end
-    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Nothing}, ::Terminal{Nothing})
-        b.undetermined
+    @eval function _apply!(b::Forest, ::$op, ::Terminal{Nothing}, ::Terminal{Nothing})
+        b.undet
     end
 end
 
 for op = [:MDDAnd, :MDDOr]
-    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Bool}, ::Terminal{Nothing})
-        b.undetermined
+    @eval function _apply!(b::Forest, ::$op, ::Terminal{Bool}, ::Terminal{Nothing})
+        b.undet
     end
-    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Nothing}, ::Terminal{Bool})
-        b.undetermined
+    @eval function _apply!(b::Forest, ::$op, ::Terminal{Nothing}, ::Terminal{Bool})
+        b.undet
     end
-    @eval function _apply!(b::MDDForest, ::$op, ::Terminal{Nothing}, ::Terminal{Nothing})
-        b.undetermined
+    @eval function _apply!(b::Forest, ::$op, ::Terminal{Nothing}, ::Terminal{Nothing})
+        b.undet
     end
 end
 
-## min
+### min
 
-function _apply!(b::MDDForest, ::MDDMin, f::Terminal{ValueT}, g::Terminal{ValueT})
-    Terminal(b, min(f.value, g.value))
+function _apply!(b::Forest, ::MDDMin, f::Terminal{Value}, g::Terminal{Value})
+    value!(b, min(f.value, g.value))
 end
 
-## max
+### max
 
-function _apply!(b::MDDForest, ::MDDMax, f::Terminal{ValueT}, g::Terminal{ValueT})
-    Terminal(b, max(f.value, g.value))
+function _apply!(b::Forest, ::MDDMax, f::Terminal{Value}, g::Terminal{Value})
+    value!(b, max(f.value, g.value))
 end
 
-## Plus
+### Plus
 
-function _apply!(b::MDDForest, ::MDDPlus, f::Terminal{ValueT}, g::Terminal{ValueT})
-    Terminal(b, f.value + g.value)
+function _apply!(b::Forest, ::MDDPlus, f::Terminal{Value}, g::Terminal{Value})
+    value!(b, f.value + g.value)
 end
 
-## Minus
+### Minus
 
-function _apply!(b::MDDForest, ::MDDMinus, f::Terminal{ValueT}, g::Terminal{ValueT})
-    Terminal(b, f.value - g.value)
+function _apply!(b::Forest, ::MDDMinus, f::Terminal{Value}, g::Terminal{Value})
+    value!(b, f.value - g.value)
 end
 
-## Mul
+### Mul
 
-function _apply!(b::MDDForest, ::MDDMul, f::Terminal{ValueT}, g::Terminal{ValueT})
-    Terminal(b, f.value * g.value)
+function _apply!(b::Forest, ::MDDMul, f::Terminal{Value}, g::Terminal{Value})
+    value!(b, f.value * g.value)
 end
 
-## Lte
+### Lte
 
-function _apply!(b::MDDForest, ::MDDLte, f::Terminal{ValueT}, g::Terminal{ValueT})
-    Terminal(b, f.value <= g.value)
+function _apply!(b::Forest, ::MDDLte, f::Terminal{Value}, g::Terminal{Value})
+    value!(b, f.value <= g.value)
 end
 
-## Lt
+### Lt
 
-function _apply!(b::MDDForest, ::MDDLt, f::Terminal{ValueT}, g::Terminal{ValueT})
-    Terminal(b, f.value < g.value)
+function _apply!(b::Forest, ::MDDLt, f::Terminal{Value}, g::Terminal{Value})
+    value!(b, f.value < g.value)
 end
 
-## Gte
+### Gte
 
-function _apply!(b::MDDForest, ::MDDGte, f::Terminal{ValueT}, g::Terminal{ValueT})
-    Terminal(b, f.value >= g.value)
+function _apply!(b::Forest, ::MDDGte, f::Terminal{Value}, g::Terminal{Value})
+    value!(b, f.value >= g.value)
 end
 
-## Gt
+### Gt
 
-function _apply!(b::MDDForest, ::MDDGt, f::Terminal{ValueT}, g::Terminal{ValueT})
-    Terminal(b, f.value > g.value)
+function _apply!(b::Forest, ::MDDGt, f::Terminal{Value}, g::Terminal{Value})
+    value!(b, f.value > g.value)
 end
 
-## Eq
+### Eq
 
-function _apply!(b::MDDForest, ::MDDEq, f::Terminal{ValueT}, g::Terminal{ValueT})
-    Terminal(b, f.value == g.value)
+function _apply!(b::Forest, ::MDDEq, f::Terminal{Value}, g::Terminal{Value})
+    value!(b, f.value == g.value)
 end
 
-## Neq
-
-function _apply!(b::MDDForest, ::MDDNeq, f::Terminal{ValueT}, g::Terminal{ValueT})
-    Terminal(b, f.value != g.value)
+function _apply!(b::Forest, ::MDDEq, f::Terminal{Bool}, g::Terminal{Bool})
+    value!(b, f.value == g.value)
 end
 
-## and
+### Neq
 
-# function _apply!(b::MDDForest, ::MDDAnd, f::Terminal{Bool}, g::Node)
-#     # assume f.value, g.value are bool
-#     if f.value == true
-#         g
-#     else
-#         b.zero
-#     end
-# end
-
-# function _apply!(b::MDDForest, ::MDDAnd, f::Node, g::Terminal{Bool})
-#     # assume f.value, g.value are bool
-#     if g.value == true
-#         f
-#     else
-#         b.zero
-#     end
-# end
-
-function _apply!(b::MDDForest, ::MDDAnd, f::Terminal{Bool}, g::Terminal{Bool})
-    # assume f.value, g.value are bool
-    Terminal(b, f.value && g.value)
+function _apply!(b::Forest, ::MDDNeq, f::Terminal{Value}, g::Terminal{Value})
+    value!(b, f.value != g.value)
 end
 
-## or
-
-# function _apply!(b::MDDForest, ::MDDOr, f::Terminal{Bool}, g::Node)
-#     # assume f.value, g.value are bool
-#     if f.value == false
-#         g
-#     else
-#         b.one
-#     end
-# end
-
-# function _apply!(b::MDDForest, ::MDDOr, f::Node, g::Terminal{Bool})
-#     # assume f.value, g.value are bool
-#     if g.value == false
-#         f
-#     else
-#         b.one
-#     end
-# end
-
-function _apply!(b::MDDForest, ::MDDOr, f::Terminal{Bool}, g::Terminal{Bool})
-    # assume f.value, g.value are bool
-    Terminal(b, f.value || g.value)
+function _apply!(b::Forest, ::MDDNeq, f::Terminal{Bool}, g::Terminal{Bool})
+    value!(b, f.value != g.value)
 end
 
-####### if
+### and
 
-function _apply!(b::MDDForest, ::MDDIf, f::Terminal{Bool}, g::Terminal{Tx}) where Tx <: Union{ValueT, Bool, Nothing}
-    # assume f.value is bool, g.value is integer
-    if f.value == true
+function _apply!(b::Forest, ::MDDAnd, f::Terminal{Bool}, g::Terminal{Bool})
+    value!(b, f.value && g.value)
+end
+
+### or
+
+function _apply!(b::Forest, ::MDDOr, f::Terminal{Bool}, g::Terminal{Bool})
+    value!(b, f.value || g.value)
+end
+
+### if
+
+for v = [:Value, :Bool, :Nothing]
+    @eval function _apply!(b::Forest, ::MDDIf, f::Terminal{Bool}, g::Terminal{$v})
+        if f.value == true
+            g
+        else
+            b.undet
+        end
+    end
+end
+
+function _apply!(b::Forest, ::MDDIf, f::Terminal{Nothing}, g::AbstractTerminalNode)
+    b.undet
+end
+
+### else
+
+for v = [:Value, :Bool, :Nothing]
+    @eval function _apply!(b::Forest, ::MDDElse, f::Terminal{Bool}, g::Terminal{$v})
+        if f.value == false
+            g
+        else
+            b.undet
+        end
+    end
+end
+
+function _apply!(b::Forest, ::MDDElse, f::Terminal{Nothing}, g::AbstractTerminalNode)
+    b.undet
+end
+
+### Union
+
+for v = [:Value, :Bool]
+    @eval function _apply!(::Forest, ::MDDUnion, f::Terminal{Nothing}, g::Terminal{$v})
         g
-    else
-        b.undetermined
+    end
+    
+    @eval function _apply!(::Forest, ::MDDUnion, f::Terminal{$v}, g::Terminal{Nothing})
+        f
     end
 end
 
-function _apply!(b::MDDForest, ::MDDIf, f::Terminal{Nothing}, g::AbstractTerminal)
-    b.undetermined
+function _apply!(b::Forest, ::MDDUnion, f::Terminal{Nothing}, g::Terminal{Nothing})
+    b.undet
 end
 
-## else
-
-function _apply!(b::MDDForest, ::MDDElse, f::Terminal{Bool}, g::Terminal{Tx}) where Tx <: Union{ValueT, Bool, Nothing}
-    # assume f.value is bool, g.value is integer
-    if f.value == false
-        g
-    else
-        b.undetermined
-    end
-end
-
-function _apply!(b::MDDForest, ::MDDElse, f::Terminal{Nothing}, g::AbstractTerminal)
-    b.undetermined
-end
-
-## Union
-
-function _apply!(b::MDDForest, ::MDDUnion, f::Terminal{Nothing}, g::Terminal{Tx}) where Tx <: Union{ValueT, Bool}
-    g
-end
-
-function _apply!(b::MDDForest, ::MDDUnion, f::Terminal{Tx}, g::Terminal{Nothing}) where Tx <: Union{ValueT, Bool}
-    f
-end
-
-function _apply!(b::MDDForest, ::MDDUnion, f::Terminal{Tx}, g::Terminal{Ty}) where {Tx <: Union{ValueT, Bool}, Ty <: Union{ValueT, Bool}}
-    throw(ErrorException("There exists a conflict condition."))
-end
-
-function _apply!(b::MDDForest, ::MDDUnion, f::Terminal{Nothing}, g::Terminal{Nothing})
-    b.undetermined
-end
+# function _apply!(b::Forest, ::MDDUnion, f::Terminal{Tx}, g::Terminal{Ty}) where {Tx <: Union{Value, Bool}, Ty <: Union{Value, Bool}}
+#     throw(ErrorException("There exists a conflict condition."))
+# end
 
 """
-todot(forest, f)
+    todot(f::AbstractNode)
+    todot(b::Forest, f::AbstractNode)
+
 Return a string for dot to draw a diagram.
 """
+function todot(f::AbstractNode)
+    todot(forest(f), f)
+end
 
-function todot(b::MDDForest, f::AbstractNode)
+function todot(b::Forest, f::AbstractNode)
     io = IOBuffer()
     visited = Set{NodeID}()
     println(io, "digraph { layout=dot; overlap=false; splines=true; node [fontsize=10];")
@@ -468,7 +764,7 @@ function todot(b::MDDForest, f::AbstractNode)
     String(take!(io))
 end
 
-function _todot!(b::MDDForest, f::AbstractTerminal, visited::Set{NodeID}, io::IO)
+function _todot!(b::Forest, f::AbstractTerminalNode, visited::Set{NodeID}, io::IO)
     if in(f.id, visited)
         return
     end
@@ -477,13 +773,13 @@ function _todot!(b::MDDForest, f::AbstractTerminal, visited::Set{NodeID}, io::IO
     nothing
 end
 
-function _todot!(b::MDDForest, f::Node, visited::Set{NodeID}, io::IO)
+function _todot!(b::Forest, f::Node, visited::Set{NodeID}, io::IO)
     if in(f.id, visited)
         return
     end
     println(io, "\"obj$(f.id)\" [shape = circle, label = \"$(f.header.label)\"];")
-    for (i,x) = enumerate(f.header.domains)
-        if f.nodes[i].id != b.undetermined.id
+    for (i,x) = enumerate(f.header.domain)
+        if f.nodes[i].id != b.undet.id
             _todot!(b, f.nodes[i], visited, io)
             println(io, "\"obj$(f.id)\" -> \"obj$(f.nodes[i].id)\" [label = \"$(x)\"];")
         end
@@ -495,13 +791,13 @@ end
 ### node and edge
 
 function Base.size(f::AbstractNode)
-    b = getdd(f)
+    b = forest(f)
     visited = Set{NodeID}()
     edges = _size!(b, f, visited)
     (length(visited), edges)
 end
 
-function _size!(b::MDDForest, f::AbstractTerminal, visited::Set{NodeID})
+function _size!(b::Forest, f::AbstractTerminalNode, visited::Set{NodeID})
     if in(f.id, visited)
         return 0
     end
@@ -509,13 +805,13 @@ function _size!(b::MDDForest, f::AbstractTerminal, visited::Set{NodeID})
     return 0
 end
 
-function _size!(b::MDDForest, f::Node, visited::Set{NodeID})
+function _size!(b::Forest, f::Node, visited::Set{NodeID})
     if in(f.id, visited)
         return 0
     end
     tmp = 0
-    for (i,x) = enumerate(f.header.domains)
-        if f.nodes[i].id != b.undetermined.id
+    for (i,x) = enumerate(f.header.domain)
+        if f.nodes[i].id != b.undet.id
             tmp += _size!(b, f.nodes[i], visited)
             tmp += 1
         end
@@ -526,21 +822,103 @@ end
 
 ### utilities
 
-mdd() = MDDForest()
+"""
+   mdd(policy::AbstractPolicy = FullyReduced())
 
-function var!(b::MDDForest, name::Symbol, level::LevelT, domains::AbstractVector{ValueT})
-    h = NodeHeader(_get_next!(b.hmgr), level, name, collect(domains))
-    Node(b, h, AbstractNode[Terminal(b, x) for x = domains])
+Create MDD forest with the reduction policy. Note the policy QuasiReduced has not implemented yet.
+"""
+mdd(policy::AbstractPolicy = FullyReduced()) = Forest(policy)
+
+"""
+    defvar!(b::Forest, name::Symbol, level::Int, domain::AbstractVector{Value})
+
+Define a new variable in MDD
+- b: Forest
+- name: Symbol of variable
+- level: Level in MDD
+- domain: Domain of a variable
+"""
+function defvar!(b::Forest, name::Symbol, level::Int, domain::AbstractVector{Value})
+    h = NodeHeader(_get_next!(b.hmgr), Level(level), name, collect(domain))
+    b.headers[name] = h
 end
 
-lt!(b::MDDForest, f::AbstractNode, g::AbstractNode) = apply!(b, MDDLt(), f, g)
-lte!(b::MDDForest, f::AbstractNode, g::AbstractNode) = apply!(b, MDDLte(), f, g)
-gt!(b::MDDForest, f::AbstractNode, g::AbstractNode) = apply!(b, MDDGt(), f, g)
-gte!(b::MDDForest, f::AbstractNode, g::AbstractNode) = apply!(b, MDDGte(), f, g)
-eq!(b::MDDForest, f::AbstractNode, g::AbstractNode) = apply!(b, MDDEq(), f, g)
-neq!(b::MDDForest, f::AbstractNode, g::AbstractNode) = apply!(b, MDDNeq(), f, g)
+"""
+    var!(b::Forest, name::Symbol)
 
-function and!(b::MDDForest, x::AbstractNode, xs::Vararg{AbstractNode})
+Get a node representing that a given variable
+- b: Forest
+- name: Symbol of variable
+"""
+function var!(b::Forest, name::Symbol)
+    var!(b, name, b.policy)
+end
+
+function var!(b::Forest, name::Symbol, ::FullyReduced)
+    h = b.headers[name]
+    node!(b, h, AbstractNode[value!(b, x) for x = h.domain])
+end
+
+"""
+    lt!(b::Forest, f, g)
+
+Less than operation
+"""
+function lt!(b::Forest, f, g)
+    apply!(b, MDDLt(), f, g)
+end
+
+"""
+    lte!(b::Forest, f, g)
+
+Less than or equal to operation
+"""
+function lte!(b::Forest, f, g)
+    apply!(b, MDDLte(), f, g)
+end
+
+"""
+    gt!(b::Forest, f, g)
+
+Greater than operation
+"""
+function gt!(b::Forest, f, g)
+    apply!(b, MDDGt(), f, g)
+end
+
+"""
+    gte!(b::Forest, f, g)
+
+Greater than or equal to operation
+"""
+function gte!(b::Forest, f, g)
+    apply!(b, MDDGte(), f, g)
+end
+
+"""
+    eq!(b::Forest, f, g)
+
+Eq operation
+"""
+function eq!(b::Forest, f, g)
+    apply!(b, MDDEq(), f, g)
+end
+
+"""
+    neq!(b::Forest, f, g)
+
+Neq operation
+"""
+function neq!(b::Forest, f, g)
+    apply!(b, MDDNeq(), f, g)
+end
+
+"""
+    and!(b::Forest, x, xs...)
+
+AND operation.
+"""
+function and!(b::Forest, x, xs...)
     tmp = x
     for u = xs
         tmp = apply!(b, MDDAnd(), tmp, u)
@@ -548,7 +926,12 @@ function and!(b::MDDForest, x::AbstractNode, xs::Vararg{AbstractNode})
     tmp
 end
 
-function or!(b::MDDForest, x::AbstractNode, xs::Vararg{AbstractNode})
+"""
+    or!(b::Forest, x, xs...)
+
+OR operation.
+"""
+function or!(b::Forest, x, xs...)
     tmp = x
     for u = xs
         tmp = apply!(b, MDDOr(), tmp, u)
@@ -556,101 +939,33 @@ function or!(b::MDDForest, x::AbstractNode, xs::Vararg{AbstractNode})
     tmp
 end
 
-function and(x::AbstractNode, xs::Vararg{AbstractNode})
-    b = getdd(x)
-    and!(b, x, xs...)
+"""
+    not!(b::Forest, x::AbstractNode)
+
+NOT operation.
+"""
+function not!(b::Forest, x)
+    apply!(b, MDDNot(), x)
 end
 
-function or(x::AbstractNode, xs::Vararg{AbstractNode})
-    b = getdd(x)
-    or!(b, x, xs...)
-end
+"""
+    ifthenelse!(b::Forest, f, g, h)
+    ifthenelse(f, g, h)
 
-function _getddfromvec(xs...)
-    for x = xs
-        if typeof(x) <: AbstractNode
-            return getdd(x)
-        end
-    end
-    throw(ErrorException("Cannot find a node"))
-end
-
-_tonode(b::MDDForest, x::AbstractNode) = x
-_tonode(b::MDDForest, x::Bool) = Terminal(b, x)
-_tonode(b::MDDForest, x::ValueT) = Terminal(b, x)
-
-function and(xs::Vararg{Union{AbstractNode,Bool}})
-    b = _getddfromvec(xs...)
-    xs = [_tonode(b, x) for x = xs]
-    and!(b, xs...)
-end
-
-function or(xs::Vararg{Union{AbstractNode,Bool}})
-    b = _getddfromvec(xs...)
-    xs = [_tonode(b, x) for x = xs]
-    or!(b, xs...)
-end
-
-not!(b::MDDForest, f::AbstractNode) = apply!(b, MDDNot(), f)
-
-function ifthenelse!(b::MDDForest, f::AbstractNode, g::AbstractNode, h::AbstractNode)
+IF-THEN-ELSE operation.
+"""
+function ifthenelse!(b::Forest, f, g, h)
     tmp1 = apply!(b, MDDIf(), f, g)
     tmp2 = apply!(b, MDDElse(), f, h)
     apply!(b, MDDUnion(), tmp1, tmp2)
 end
 
-function ifthenelse(f::AbstractNode, g::AbstractNode, h::AbstractNode)
-    b = getdd(f)
-    ifthenelse!(b, f, g, h)
-end
+"""
+    max!(b::Forest, x, xs...)
 
-function ifthenelse(f::AbstractNode, g::Tx, h::AbstractNode) where Tx <: Union{ValueT,Nothing}
-    b = getdd(f)
-    ifthenelse!(b, f, Terminal(b, g), h)
-end
-
-function ifthenelse(f::AbstractNode, g::AbstractNode, h::Tx) where Tx <: Union{ValueT,Nothing}
-    b = getdd(f)
-    ifthenelse!(b, f, g, Terminal(b, h))
-end
-
-function ifthenelse(f::AbstractNode, g::Tx1, h::Tx2) where {Tx1 <: Union{ValueT,Nothing}, Tx2 <: Union{ValueT,Nothing}}
-    b = getdd(f)
-    ifthenelse!(b, f, Terminal(b, g), Terminal(b, h))
-end
-
-function ifthenelse(f::Bool, g::AbstractNode, h::AbstractNode)
-    b = getdd(g)
-    ifthenelse!(b, Terminal(b, f), g, h)
-end
-
-function ifthenelse(f::Bool, g::Tx, h::AbstractNode) where Tx <: Union{ValueT,Nothing}
-    b = getdd(h)
-    ifthenelse!(b, Terminal(b, f), Terminal(b, g), h)
-end
-
-function ifthenelse(f::Bool, g::AbstractNode, h::Tx) where Tx <: Union{ValueT,Nothing}
-    b = getdd(g)
-    ifthenelse!(b, Terminal(b, f), g, Terminal(b, h))
-end
-
-function ifthenelse(f::Bool, g::Tx1, h::Tx2) where {Tx1 <: Union{ValueT,Nothing}, Tx2 <: Union{ValueT,Nothing}}
-    if f
-        g
-    else
-        h
-    end
-end
-
-# function match!(b::MDDForest, args::Vararg{Tuple{AbstractNode,AbstractNode}})
-#     tmp = default
-#     for x = reverse(args)
-#         tmp = ifthenelse!(x[1], x[2], tmp)
-#     end
-#     tmp
-# end
-
-function max!(b::MDDForest, x::AbstractNode, xs...)
+MAX operation.
+"""
+function max!(b::Forest, x, xs...)
     tmp = x
     for u = xs
         tmp = apply!(b, MDDMax(), tmp, u)
@@ -658,7 +973,12 @@ function max!(b::MDDForest, x::AbstractNode, xs...)
     tmp
 end
 
-function min!(b::MDDForest, x::AbstractNode, xs...)
+"""
+    min!(b::Forest, x, xs...)
+
+MIN operation.
+"""
+function min!(b::Forest, x, xs...)
     tmp = x
     for u = xs
         tmp = apply!(b, MDDMin(), tmp, u)
@@ -666,7 +986,12 @@ function min!(b::MDDForest, x::AbstractNode, xs...)
     tmp
 end
 
-function plus!(b::MDDForest, x::AbstractNode, xs...)
+"""
+    plus!(b::Forest, x, xs...)
+
+Plus operation.
+"""
+function plus!(b::Forest, x, xs...)
     tmp = x
     for u = xs
         tmp = apply!(b, MDDPlus(), tmp, u)
@@ -674,9 +999,21 @@ function plus!(b::MDDForest, x::AbstractNode, xs...)
     tmp
 end
 
-minus!(b::MDDForest, f::AbstractNode, g::AbstractNode) = apply!(b, MDDMinus(), f, g)
+"""
+    minus!(b::Forest, x, y)
 
-function mul!(b::MDDForest, x::AbstractNode, xs...)
+Minus operation.
+"""
+function minus!(b::Forest, f, g)
+    apply!(b, MDDMinus(), f, g)
+end
+
+"""
+    mul!(b::Forest, x, xs...)
+
+Multiple operation.
+"""
+function mul!(b::Forest, x, xs...)
     tmp = x
     for u = xs
         tmp = apply!(b, MDDMul(), tmp, u)
@@ -684,33 +1021,31 @@ function mul!(b::MDDForest, x::AbstractNode, xs...)
     tmp
 end
 
+### Overloads
+
+and(x::AbstractNode, xs...) = and!(forest(x), x, xs...)
+and(x::Bool, y::AbstractNode) = and!(forest(y), x, y)
+or(x::AbstractNode, xs...) = or!(forest(x), x, xs...)
+or(x::Bool, y::AbstractNode) = or!(forest(y), x, y)
+ifthenelse(f::AbstractNode, g::AbstractNode, h::AbstractNode) = ifthenelse!(forest(f), f, g, h)
+ifthenelse(f::AbstractNode, g::AbstractNode, h::Any) = ifthenelse!(forest(f), f, g, h)
+ifthenelse(f::AbstractNode, g::Any, h::AbstractNode) = ifthenelse!(forest(f), f, g, h)
+ifthenelse(f::Any, g::AbstractNode, h::AbstractNode) = ifthenelse!(forest(g), f, g, h)
+ifthenelse(f::AbstractNode, g::Any, h::Any) = ifthenelse!(forest(f), f, g, h)
+ifthenelse(f::Any, g::AbstractNode, h::Any) = ifthenelse!(forest(g), f, g, h)
+ifthenelse(f::Any, g::Any, h::AbstractNode) = ifthenelse!(forest(h), f, g, h)
+ifthenelse(f::Bool, g::Any, h::Any) = f ? g : h
+
 ops = [:(<), :(<=), :(>), :(>=), :(==), :(!=), :(+), :(-), :(*), :(max), :(min)]
 fns = [:lt!, :lte!, :gt!, :gte!, :eq!, :neq!, :plus!, :minus!, :mul!, :max!, :min!]
-
 for (op, fn) = zip(ops, fns)
-    @eval Base.$op(x::AbstractNode, y::AbstractNode) = $fn(getdd(x), x, y)
-    @eval Base.$op(x::AbstractNode, y::ValueT) = $fn(getdd(x), x, Terminal(getdd(x), y))
-    @eval Base.$op(x::ValueT, y::AbstractNode) = $fn(getdd(y), Terminal(getdd(y), x), y)
-    @eval Base.$op(x::AbstractNode, y::Bool) = $fn(getdd(x), x, Terminal(getdd(x), y))
-    @eval Base.$op(x::Bool, y::AbstractNode) = $fn(getdd(y), Terminal(getdd(y), x), y)
-    @eval Base.$op(x::AbstractNode, y::Nothing) = $fn(getdd(x), x, Terminal(getdd(x)))
-    @eval Base.$op(x::Nothing, y::AbstractNode) = $fn(getdd(y), Terminal(getdd(y)), y)
+    @eval Base.$op(x::AbstractNode, y::AbstractNode) = $fn(forest(x), x, y)
+    @eval Base.$op(x::AbstractNode, y::Any) = $fn(forest(x), x, value!(forest(x), y))
+    @eval Base.$op(x::Any, y::AbstractNode) = $fn(forest(y), value!(forest(y), x), y)
 end
 
-# ops = [:and, :or]
-# fns = [:and!, :or!]
-
-# for (op, fn) = zip(ops, fns)
-#     @eval $op(x::AbstractNode, xs...) = $fn(getdd(x), x, xs)
-#     @eval $op(x::AbstractNode, y::Bool) = $fn(getdd(x), x, Terminal(getdd(x), y))
-#     @eval $op(x::Bool, y::AbstractNode) = $fn(getdd(y), Terminal(getdd(y), x), y)
-#     @eval $op(x::AbstractNode, y::Nothing) = $fn(getdd(x), x, Terminal(getdd(x)))
-#     @eval $op(x::Nothing, y::AbstractNode) = $fn(getdd(y), Terminal(getdd(y)), y)
-# end
-
-Base.:(!)(x::AbstractNode) = not!(getdd(x), x)
-Base.:(-)(x::AbstractNode) = minus!(getdd(x), Terminal(getdd(x), 0), x)
-todot(f::AbstractNode) = todot(getdd(f), f)
+Base.:(!)(x::AbstractNode) = not!(forest(x), x)
+Base.:(-)(x::AbstractNode) = minus!(forest(x), value!(forest(x), 0), x)
 
 """
 macro

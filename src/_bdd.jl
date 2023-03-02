@@ -4,6 +4,8 @@ BDD Module
 
 module BDD
 
+import Base: show
+
 export AbstractNode
 export AbstractNonTerminalNode
 export AbstractTerminalNode
@@ -160,6 +162,7 @@ end
 A mutable structure to store the information on DD. The fields are
 - mgr: NodeManager to issue IDs of nodes
 - hmgr: NodeManager to issue IDs of headers
+- headers: A dictionary of the pair of Symbol and NodeHeader
 - utable: Unique table to identify the tuple (header id, low node id, high node id)
 - zero: A terminal node indicating zero
 - one: A terminal node indicating one
@@ -222,71 +225,6 @@ mutable struct Node <: AbstractNonTerminalNode
     header::NodeHeader
     low::AbstractNode
     high::AbstractNode
-end
-
-"""
-    node!(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode)
-
-Constructor of Node. If there exists any node which has same children in the same level,
-the function returns the exisiting node. In addition, if the policy of forest is the FullyReduced,
-the nodes with same directions are reduced.
-- b: Forest
-- h: NodeHeader
-- low: Low node
-- high: High node
-"""
-function node!(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode)
-    _node!(b, h, low, high, b.policy)
-end
-
-"""
-    node!(b::Forest, x::Symbol, low::AbstractNode, high::AbstractNode)
-    node!(b::Forest, x::Symbol, low::Bool, high::AbstractNode)
-    node!(b::Forest, x::Symbol, low::AbstractNode, high::Bool)
-    node!(b::Forest, x::Symbol, low::Bool, high::Bool)
-
-Constructor of Node.
-- x: Symbol of variable
-- low: Low node
-- high: High node
-"""
-function node!(b::Forest, x::Symbol, low::AbstractNode, high::AbstractNode)
-    h = b.headers[x]
-    _node!(b, h, low, high, b.policy)
-end
-
-function node!(b::Forest, x::Symbol, low::Bool, high::AbstractNode)
-    h = b.headers[x]
-    _node!(b, h, Terminal(b, low), high, b.policy)
-end
-
-function node!(b::Forest, x::Symbol, low::AbstractNode, high::Bool)
-    h = b.headers[x]
-    _node!(b, h, low, Terminal(b, high), b.policy)
-end
-
-function node!(b::Forest, x::Symbol, low::Bool, high::Bool)
-    h = b.headers[x]
-    _node!(b, h, Terminal(b, low), Terminal(b, high), b.policy)
-end
-
-function _node!(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode, ::FullyReduced)
-    if low.id == high.id
-        return low
-    end
-    key = (h.id, low.id, high.id)
-    get(b.utable, key) do
-        id = _get_next!(b.mgr)
-        b.utable[key] = Node(b, id, h, low, high)
-    end
-end
-
-function _node!(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode, ::QuasiReduced)
-    key = (h.id, low.id, high.id)
-    get(b.utable, key) do
-        id = _get_next!(b.mgr)
-        b.utable[key] = Node(b, id, h, low, high)
-    end
 end
 
 """
@@ -364,6 +302,71 @@ function label(x::AbstractTerminalNode)
 end
 
 """
+    node!(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode)
+
+Constructor of Node. If there exists any node which has same children in the same level,
+the function returns the exisiting node. In addition, if the policy of forest is the FullyReduced,
+the nodes with same directions are reduced.
+- b: Forest
+- h: NodeHeader
+- low: Low node
+- high: High node
+"""
+function node!(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode)
+    _node!(b, h, low, high, b.policy)
+end
+
+"""
+    node!(b::Forest, x::Symbol, low::AbstractNode, high::AbstractNode)
+    node!(b::Forest, x::Symbol, low::Bool, high::AbstractNode)
+    node!(b::Forest, x::Symbol, low::AbstractNode, high::Bool)
+    node!(b::Forest, x::Symbol, low::Bool, high::Bool)
+
+Constructor of Node.
+- x: Symbol of variable
+- low: Low node
+- high: High node
+"""
+function node!(b::Forest, x::Symbol, low::AbstractNode, high::AbstractNode)
+    h = b.headers[x]
+    _node!(b, h, low, high, b.policy)
+end
+
+function node!(b::Forest, x::Symbol, low::Bool, high::AbstractNode)
+    h = b.headers[x]
+    _node!(b, h, Terminal(b, low), high, b.policy)
+end
+
+function node!(b::Forest, x::Symbol, low::AbstractNode, high::Bool)
+    h = b.headers[x]
+    _node!(b, h, low, Terminal(b, high), b.policy)
+end
+
+function node!(b::Forest, x::Symbol, low::Bool, high::Bool)
+    h = b.headers[x]
+    _node!(b, h, Terminal(b, low), Terminal(b, high), b.policy)
+end
+
+function _node!(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode, ::FullyReduced)
+    if low.id == high.id
+        return low
+    end
+    key = (h.id, low.id, high.id)
+    get(b.utable, key) do
+        id = _get_next!(b.mgr)
+        b.utable[key] = Node(b, id, h, low, high)
+    end
+end
+
+function _node!(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode, ::QuasiReduced)
+    key = (h.id, low.id, high.id)
+    get(b.utable, key) do
+        id = _get_next!(b.mgr)
+        b.utable[key] = Node(b, id, h, low, high)
+    end
+end
+
+"""
     Terminal
 
 A structure of Terminal node.
@@ -375,7 +378,7 @@ mutable struct Terminal <: AbstractTerminalNode
 end
 
 """
-    Terminal
+    Terminal(b::Forest, value::Bool)
 
 The constructor of terminal. The value is a boolean value.
 """
@@ -388,7 +391,7 @@ function Terminal(b::Forest, value::Bool)
 end
 
 """
-    iszero(x::AbstractTerminalNode)
+    iszero(x::AbstractNode)
 
 Return a boolean value if the terminal is zero.
 """
@@ -401,7 +404,7 @@ function Base.iszero(x::AbstractTerminalNode)
 end
 
 """
-    isone(x::AbstractTerminalNode)
+    isone(x::AbstractNode)
 
 Return a boolean value if the terminal is one.
 """
@@ -463,41 +466,38 @@ end
 
 function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNode, g::AbstractNonTerminalNode)
     key = (op, f.id, g.id)
-    get(b.cache, key) do
+    get!(b.cache, key) do
         if f.header.level > g.header.level
             low = _apply!(b, op, f.low, g)
             high = _apply!(b, op, f.high, g)
-            ans = node!(b, f.header, low, high)
+            node!(b, f.header, low, high)
         elseif f.header.level < g.header.level
             low = _apply!(b, op, f, g.low)
             high = _apply!(b, op, f, g.high)
-            ans = node!(b, g.header, low, high)
+            node!(b, g.header, low, high)
         else
             low = _apply!(b, op, f.low, g.low)
             high = _apply!(b, op, f.high, g.high)
-            ans = node!(b, f.header, low, high)
+            node!(b, f.header, low, high)
         end
-        b.cache[key] = ans
     end
 end
 
 function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractTerminalNode, g::AbstractNonTerminalNode)
     key = (op, f.id, g.id)
-    get(b.cache, key) do
+    get!(b.cache, key) do
         low = _apply!(b, op, f, g.low)
         high = _apply!(b, op, f, g.high)
-        ans = node!(b, g.header, low, high)
-        b.cache[key] = ans
+        node!(b, g.header, low, high)
     end
 end
 
 function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNode, g::AbstractTerminalNode)
     key = (op, f.id, g.id)
-    get(b.cache, key) do
+    get!(b.cache, key) do
         low = _apply!(b, op, f.low, g)
         high = _apply!(b, op, f.high, g)
-        ans = node!(b, f.header, low, high)
-        b.cache[key] = ans
+        node!(b, f.header, low, high)
     end
 end
 
@@ -823,9 +823,9 @@ imp(f::Bool, g::AbstractNode) = imp!(forest(g), f, g)
 
 """
    ifthenelse!(b::Forest, f, g, h)
-   imp(x::AbstractNode, y)
+   ifthenelse(f, g, h)
 
-IMP (imply) operation.
+IF-THEN-ELSE operation.
 """
 function ifthenelse!(b::Forest, f, g, h)
     or!(b, and!(b, f, g), and!(b, not!(b, f), h))

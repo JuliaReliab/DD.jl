@@ -236,12 +236,12 @@ end
 
 @testset "MSS9" begin
     b = mdd()
-    defvar!(b, :A, 3, [0,1])
-    defvar!(b, :B, 2, [0,1,2])
-    defvar!(b, :C, 1, [0,1,2])
-    A = var!(b, :A)
-    B = var!(b, :B)
-    C = var!(b, :C)
+    defvar!(b, :x, 3, [0,1])
+    defvar!(b, :y, 2, [0,1,2])
+    defvar!(b, :z, 1, [0,1,2])
+    A = var!(b, :x)
+    B = var!(b, :y)
+    C = var!(b, :z)
 
     g1 = (x, y) -> @match(
         x == 0 => 0,
@@ -259,6 +259,93 @@ end
     SS = g1(A, Sx)
 
     println(todot(SS))
+end
+
+@testset "genfunc1" begin
+    b = mdd()
+    defvar!(b, :x, 3, [0,1])
+    defvar!(b, :y, 2, [0,1,2])
+    defvar!(b, :z, 1, [0,1,2])
+    x = var!(b, :x)
+    y = var!(b, :y)
+    z = var!(b, :z)
+
+    v = [
+        [0, 0, 0, 0],
+        [1, 0, 0, 0],
+        [2, 0, 0, 0],
+        [0, 1, 0, 0],
+        [1, 1, 0, 0],
+        [2, 1, 0, 0],
+        [0, 2, 0, 0],
+        [1, 2, 0, 0],
+        [2, 2, 0, 0],
+        [0, 0, 1, 0],
+        [1, 0, 1, 1],
+        [2, 0, 1, 1],
+        [0, 1, 1, 1],
+        [1, 1, 1, 2],
+        [2, 1, 1, 3],
+        [0, 2, 1, 1],
+        [1, 2, 1, 3],
+        [2, 2, 1, 3]
+    ]
+    f = genfunc!(b, v)
+
+    println(todot(f))
+end
+
+@testset "genfunc2" begin
+    b = mdd()
+    defvar!(b, :x, 3, [0,1])
+    defvar!(b, :y, 2, [0,1,2])
+    defvar!(b, :z, 1, [0,1,2])
+    x = var!(b, :x)
+    y = var!(b, :y)
+    z = var!(b, :z)
+
+    f = 3*x + y - 2*z
+    result = !and(f >= 0, f < 2)
+
+    println(todot(f))
+    println(todot(result))
+end
+
+function tomat(x::AbstractNode)
+    visited = Set{NodeID}([])
+    results = Tuple{Int,Int}[]
+    _tomat(x, visited, results)
+    results
+end
+
+function _tomat(x::AbstractNonTerminalNode, visited, results)
+    if !in(id(x), visited)
+        nodes = get_nodes(x)
+        for y = nodes
+            push!(results, (id(x), id(y)))
+            _tomat(y, visited, results)
+        end
+        push!(visited, id(x))
+    end
+end
+
+function _tomat(x::AbstractTerminalNode, visited, results)
+    if !in(id(x), visited)
+        push!(visited, id(x))
+    end
+end
+
+@testset "tomat1" begin
+    b = mdd()
+    defvar!(b, :x, 3, [0,1])
+    defvar!(b, :y, 2, [0,1,2])
+    defvar!(b, :z, 1, [0,1,2])
+    x = var!(b, :x)
+    y = var!(b, :y)
+    z = var!(b, :z)
+
+    f = 3*x + y - 2*z
+    println(tomat(f))
 end
 
 end

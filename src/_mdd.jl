@@ -22,9 +22,13 @@ export label
 export domain
 export node!
 export value!
+export isfalse
+export istrue
+export isnothing
 
 export defvar!
 export var!
+export genfunc!
 
 export lt!
 export lte!
@@ -430,44 +434,44 @@ function value!(b::Forest, ::Nothing)
 end
 
 """
-    iszero(x::AbstractNode)
+    isfalse(x::AbstractNode)
 
-Return a boolean value if the terminal is zero.
+Return a boolean value if the terminal is false
 """
-function Base.iszero(x::AbstractNonTerminalNode)
+function isfalse(x::AbstractNonTerminalNode)
     false
 end
 
-function Base.iszero(x::Terminal{Value})
+function isfalse(x::Terminal{Value})
     false
 end
 
-function Base.iszero(x::Terminal{Bool})
+function isfalse(x::Terminal{Bool})
     x.value == false
 end
 
-function Base.iszero(x::Terminal{Nothing})
+function isfalse(x::Terminal{Nothing})
     false
 end
 
 """
-    isone(x::AbstractNode)
+    istrue(x::AbstractNode)
 
 Return a boolean value if the terminal is one.
 """
-function Base.isone(x::AbstractNonTerminalNode)
+function istrue(x::AbstractNonTerminalNode)
     false
 end
 
-function Base.isone(x::Terminal{Value})
+function istrue(x::Terminal{Value})
     false
 end
 
-function Base.isone(x::Terminal{Bool})
+function istrue(x::Terminal{Bool})
     x.value == true
 end
 
-function Base.isone(x::Terminal{Nothing})
+function istrue(x::Terminal{Nothing})
     false
 end
 
@@ -1046,6 +1050,25 @@ end
 
 Base.:(!)(x::AbstractNode) = not!(forest(x), x)
 Base.:(-)(x::AbstractNode) = minus!(forest(x), value!(forest(x), 0), x)
+
+"""
+    genfunc!(b::Forest, xs::Vector{Vector{Value}})
+
+Generate a function to MDD.
+"""
+function genfunc!(b::Forest, xs::Vector{Vector{Value}})
+    vars = [var!(b, label(x)) for x = sort(collect(values(b.headers)), by=x->level(x))]
+    mp = b.undet
+    for x = xs
+        tmp = value!(b, x[end])
+        for (i,v) = enumerate(vars)
+            nodes = AbstractNode[(x[i] == u) ? tmp : b.undet for u = domain(v)]
+            tmp = node!(b, v.header, nodes)
+        end
+        mp = apply!(b, MDDUnion(), mp, tmp)
+    end
+    mp
+end
 
 """
 macro

@@ -6,30 +6,28 @@ using Test
 using DD.MDD
 using Random
 
-import DD.MDD: MDDForest, AbstractNode, ValueT, Terminal, Node
-
 """
 getbounds(forest, f, lower, upper)
 """
 
-function getbounds(f::AbstractNode, lower::Vector{ValueT}, upper::Vector{ValueT})
+function getbounds(f::AbstractNode, lower::Vector{DomainValue}, upper::Vector{DomainValue})
     cache = Dict()
     _getbounds!(f, lower, upper, cache)
 end
 
-function _getbounds!(f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
+function _getbounds!(f::AbstractTerminalNode{DomainValue}, ::Vector{DomainValue}, ::Vector{DomainValue}, cache)
     [f.value, f.value]
 end
 
-function _getbounds!(f::Terminal{Nothing}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
+function _getbounds!(f::AbstractTerminalNode{Nothing}, ::Vector{DomainValue}, ::Vector{DomainValue}, cache)
     [nothing, nothing]
 end
 
-function _getbounds!(f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, cache)
-    get(cache, f.id) do
+function _getbounds!(f::AbstractNonTerminalNode, lower::Vector{DomainValue}, upper::Vector{DomainValue}, cache)
+    get(cache, id(f)) do
         m = Any[nothing, nothing]
-        for i = f.header.index[lower[f.header.level]]:f.header.index[upper[f.header.level]]
-            lres, ures = _getbounds!(f.nodes[i], lower, upper, cache)
+        for i = f.header.index[lower[level(f)]]:f.header.index[upper[level(f)]]
+            lres, ures = _getbounds!(get_nodes(f)[i], lower, upper, cache)
             if lres != nothing && (m[1] == nothing || lres < m[1])
                 m[1] = lres
             end
@@ -37,7 +35,7 @@ function _getbounds!(f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, cach
                 m[2] = ures
             end
         end
-        cache[f.id] = m
+        cache[id(f)] = m
     end
 end
 
@@ -45,7 +43,7 @@ end
 getmaxbounds2(forest, f, lower, upper)
 """
 
-function getbounds3(f::AbstractNode, lower::Vector{ValueT}, upper::Vector{ValueT}, id)
+function getbounds3(f::AbstractNode, lower::Vector{DomainValue}, upper::Vector{DomainValue}, id)
     result1 = []
     result2 = []
     _getidnode!(f, lower, upper, id, Set(), result1, result2)
@@ -80,7 +78,7 @@ function getbounds3(f::AbstractNode, lower::Vector{ValueT}, upper::Vector{ValueT
     m
 end
 
-function _getidnode!(f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, id, visited, result1, result2)
+function _getidnode!(f::AbstractNode, lower::Vector{DomainValue}, upper::Vector{DomainValue}, id, visited, result1, result2)
     if in(f.id, visited)
         return
     end
@@ -101,7 +99,7 @@ function _getidnode!(f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, id, 
     end
 end
 
-function _getidnode!(f::Terminal{ValueT}, lower::Vector{ValueT}, upper::Vector{ValueT}, id, visited, result1, result2)
+function _getidnode!(f::AbstractTerminalNode{DomainValue}, lower::Vector{DomainValue}, upper::Vector{DomainValue}, id, visited, result1, result2)
     if in(f.id, visited)
         return
     end
@@ -109,23 +107,23 @@ function _getidnode!(f::Terminal{ValueT}, lower::Vector{ValueT}, upper::Vector{V
     push!(result2, f)
 end
 
-function _getidnode!(f::Terminal{Nothing}, lower::Vector{ValueT}, upper::Vector{ValueT}, id, visited, result1, result2)
+function _getidnode!(f::AbstractTerminalNode{Nothing}, lower::Vector{DomainValue}, upper::Vector{DomainValue}, id, visited, result1, result2)
     return
 end
 
-function _getbounds3!(f::Terminal{ValueT}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
+function _getbounds3!(f::AbstractTerminalNode{DomainValue}, ::Vector{DomainValue}, ::Vector{DomainValue}, cache)
     get(cache, f.id) do
         cache[f.id] = [f.value, f.value]
     end
 end
 
-function _getbounds3!(f::Terminal{Nothing}, ::Vector{ValueT}, ::Vector{ValueT}, cache)
+function _getbounds3!(f::AbstractTerminalNode{Nothing}, ::Vector{DomainValue}, ::Vector{DomainValue}, cache)
     get(cache, f.id) do
         cache[f.id] = [nothing, nothing]
     end
 end
 
-function _getbounds3!(f::Node, lower::Vector{ValueT}, upper::Vector{ValueT}, cache)
+function _getbounds3!(f::AbstractNode, lower::Vector{DomainValue}, upper::Vector{DomainValue}, cache)
     get(cache, f.id) do
         m = Any[nothing, nothing]
         for i = f.header.index[lower[f.header.level]]:f.header.index[upper[f.header.level]]
@@ -143,11 +141,17 @@ end
 
 @testset "P1" begin
     b = mdd()
-    x3 = var!(b, :x3, 1, 0:10)
-    x2 = var!(b, :x2, 2, 0:10)
-    x1 = var!(b, :x1, 3, 0:10)
-    t1 = var!(b, :t1, 4, 0:1)
-    t1dash = var!(b, Symbol("t1'"), 5, 0:1)
+    defvar!(b, :x3, 1, 0:10)
+    defvar!(b, :x2, 2, 0:10)
+    defvar!(b, :x1, 3, 0:10)
+    defvar!(b, :t1, 4, 0:1)
+    defvar!(b, :t1dash, 5, 0:1)
+
+    x3 = var!(b, :x3)
+    x2 = var!(b, :x2)
+    x1 = var!(b, :x1)
+    t1 = var!(b, :t1)
+    t1dash = var!(b, :t1dash)
 
     x1dash = @match(
         t1 == 1 && x1 >= 1 && x2 >= 1 && x3 < 10 => x1 - 1,
@@ -173,9 +177,15 @@ end
 @testset "P2" begin
     b = mdd()
     n = 5
-    x = [var!(b, Symbol(:x, i), i, 0:n) for i = 1:6]
-    t1 = var!(b, :t1, 7, 1:6)
-    t2 = var!(b, :t2, 8, 1:6)
+    for i = 1:6
+        defvar!(b, Symbol(:x, i), i, 0:n)
+    end
+    defvar!(b, :t1, 7, 1:6)
+    defvar!(b, :t2, 8, 1:6)
+
+    x = [var!(b, Symbol(:x, i)) for i = 1:6]
+    t1 = var!(b, :t1)
+    t2 = var!(b, :t2)
 
     @time begin
         s = @match(
@@ -296,10 +306,16 @@ end
 @testset "P3" begin
     b = mdd()
     n = 5
-    x = [var!(b, Symbol(:x, i), i, 0:n) for i = 1:6]
+    for i = 1:6
+        defvar!(b, Symbol(:x, i), i, 0:n)
+    end
+    defvar!(b, :t1, 7, 1:6)
+    defvar!(b, :t2, 8, 1:6)
+
+    x = [var!(b, Symbol(:x, i)) for i = 1:6]
     x0 = x
-    t1 = var!(b, :t1, 7, 1:6)
-    t2 = var!(b, :t2, 8, 1:6)
+    t1 = var!(b, :t1)
+    t2 = var!(b, :t2)
 
     @time begin
         s = @match(

@@ -9,6 +9,7 @@ export AbstractNonTerminalNode
 export AbstractTerminalNode
 export NodeID
 export Level
+export DomainValue
 export FullyReduced
 export QuasiReduced
 
@@ -66,10 +67,13 @@ abstract type AbstractNonTerminalNode <: AbstractNode end
 
 """
     AbstractTerminalNode
+    AbstractTerminalNode{DomainValue}
+    AbstractTerminalNode{Bool}
+    AbstractTerminalNode{Nothing}
 
 Abstract type for terminal node.
 """
-abstract type AbstractTerminalNode <: AbstractNode end
+abstract type AbstractTerminalNode{T} <: AbstractNode end
 
 function Base.show(io::IO, n::AbstractNode)
     Base.show(io, "node$(n.id)")
@@ -90,11 +94,11 @@ The type for node level.
 const Level = UInt
 
 """
-    Value
+    DomainValue
 
 The type for value.
 """
-const Value = Int
+const DomainValue = Int
 
 """
     AbstractOperator
@@ -181,14 +185,14 @@ mutable struct NodeHeader
     id::NodeID
     level::Level
     label::Symbol
-    domain::Vector{Value}
-    index::Dict{Value,Int}
+    domain::Vector{DomainValue}
+    index::Dict{DomainValue,Int}
 
-    # function NodeHeader(level::Level, domain::Value)
+    # function NodeHeader(level::Level, domain::DomainValue)
     #     new(NodeID(level), level, Symbol(level), [i for i = 1:domain])
     # end
 
-    function NodeHeader(id::NodeID, level::Level, label::Symbol, domain::Vector{Value})
+    function NodeHeader(id::NodeID, level::Level, label::Symbol, domain::Vector{DomainValue})
         new(id, level, label, domain, Dict([x => i for (i,x) = enumerate(domain)]...))
     end
 end
@@ -211,10 +215,10 @@ mutable struct Forest
     hmgr::NodeManager
     headers::Dict{Symbol,NodeHeader}
     utable::Dict{Tuple{NodeID,Vector{NodeID}},AbstractNode}
-    vtable::Dict{Value,AbstractNode}
-    zero::AbstractTerminalNode
-    one::AbstractTerminalNode
-    undet::AbstractTerminalNode
+    vtable::Dict{DomainValue,AbstractNode}
+    zero::AbstractTerminalNode{Bool}
+    one::AbstractTerminalNode{Bool}
+    undet::AbstractTerminalNode{Nothing}
     cache::Dict{Tuple{AbstractOperator,NodeID,NodeID},AbstractNode}
     policy::AbstractPolicy
 
@@ -224,7 +228,7 @@ mutable struct Forest
         b.hmgr = NodeManager(0)
         b.headers = Dict{Symbol,NodeHeader}()
         b.utable = Dict{Tuple{NodeID,Vector{NodeID}},AbstractNode}()
-        b.vtable = Dict{Value,AbstractNode}()
+        b.vtable = Dict{DomainValue,AbstractNode}()
         b.zero = Terminal{Bool}(b, _get_next!(b.mgr), false)
         b.one = Terminal{Bool}(b, _get_next!(b.mgr), true)
         b.undet = Terminal{Nothing}(b, _get_next!(b.mgr), nothing)
@@ -331,7 +335,6 @@ end
 """
     domain(x::NodeHeader)
     domain(x::AbstractNonTerminalNode)
-    domain(x::AbstractTerminalNode)
 
 Get a domain
 """
@@ -397,27 +400,27 @@ function _issame(nodes::Vector{AbstractNode})
 end
 
 """
-    Terminal{Tv} <: AbstractTerminalNode
+    Terminal{Tv} <: AbstractTerminalNode{Tv}
 
 A structure of Terminal node.
 """
-struct Terminal{Tv} <: AbstractTerminalNode
+struct Terminal{Tv} <: AbstractTerminalNode{Tv}
     b::Forest
     id::NodeID
     value::Tv
 end
 
 """
-    value!(b::Forest, value::Value)
+    value!(b::Forest, value::DomainValue)
     value!(b::Forest, value::Bool)
     value!(b::Forest, value::Nothing)
 
 The constructor of terminal. The value is an integer, boolean or nothing value.
 """
-function value!(b::Forest, value::Value)
+function value!(b::Forest, value::DomainValue)
     get(b.vtable, value) do
         id = _get_next!(b.mgr)
-        b.vtable[value] = Terminal{Value}(b, id, value)
+        b.vtable[value] = Terminal{DomainValue}(b, id, value)
     end
 end
 
@@ -442,7 +445,7 @@ function isfalse(x::AbstractNonTerminalNode)
     false
 end
 
-function isfalse(x::Terminal{Value})
+function isfalse(x::Terminal{DomainValue})
     false
 end
 
@@ -463,7 +466,7 @@ function istrue(x::AbstractNonTerminalNode)
     false
 end
 
-function istrue(x::Terminal{Value})
+function istrue(x::Terminal{DomainValue})
     false
 end
 
@@ -484,7 +487,7 @@ function Base.isnothing(x::AbstractNonTerminalNode)
     false
 end
 
-function Base.isnothing(x::Terminal{Value})
+function Base.isnothing(x::Terminal{DomainValue})
     false
 end
 
@@ -519,7 +522,7 @@ function apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNode, g::Abstr
     _apply!(b, op, f, g)
 end
 
-for t = [:Value, :Bool, :Nothing]
+for t = [:DomainValue, :Bool, :Nothing]
     @eval function apply!(b::Forest, op::AbstractUnaryOperator, f::$t)
         _apply!(b, op, value!(b, f))
     end
@@ -588,10 +591,10 @@ end
 ### for nothing
 
 for op = [:MDDMin, :MDDMax, :MDDPlus, :MDDMinus, :MDDMul, :MDDLte, :MDDLt, :MDDGte, :MDDGt, :MDDEq, :MDDNeq]
-    @eval function _apply!(b::Forest, ::$op, ::Terminal{Value}, ::Terminal{Nothing})
+    @eval function _apply!(b::Forest, ::$op, ::Terminal{DomainValue}, ::Terminal{Nothing})
         b.undet
     end
-    @eval function _apply!(b::Forest, ::$op, ::Terminal{Nothing}, ::Terminal{Value})
+    @eval function _apply!(b::Forest, ::$op, ::Terminal{Nothing}, ::Terminal{DomainValue})
         b.undet
     end
     @eval function _apply!(b::Forest, ::$op, ::Terminal{Nothing}, ::Terminal{Nothing})
@@ -613,61 +616,61 @@ end
 
 ### min
 
-function _apply!(b::Forest, ::MDDMin, f::Terminal{Value}, g::Terminal{Value})
+function _apply!(b::Forest, ::MDDMin, f::Terminal{DomainValue}, g::Terminal{DomainValue})
     value!(b, min(f.value, g.value))
 end
 
 ### max
 
-function _apply!(b::Forest, ::MDDMax, f::Terminal{Value}, g::Terminal{Value})
+function _apply!(b::Forest, ::MDDMax, f::Terminal{DomainValue}, g::Terminal{DomainValue})
     value!(b, max(f.value, g.value))
 end
 
 ### Plus
 
-function _apply!(b::Forest, ::MDDPlus, f::Terminal{Value}, g::Terminal{Value})
+function _apply!(b::Forest, ::MDDPlus, f::Terminal{DomainValue}, g::Terminal{DomainValue})
     value!(b, f.value + g.value)
 end
 
 ### Minus
 
-function _apply!(b::Forest, ::MDDMinus, f::Terminal{Value}, g::Terminal{Value})
+function _apply!(b::Forest, ::MDDMinus, f::Terminal{DomainValue}, g::Terminal{DomainValue})
     value!(b, f.value - g.value)
 end
 
 ### Mul
 
-function _apply!(b::Forest, ::MDDMul, f::Terminal{Value}, g::Terminal{Value})
+function _apply!(b::Forest, ::MDDMul, f::Terminal{DomainValue}, g::Terminal{DomainValue})
     value!(b, f.value * g.value)
 end
 
 ### Lte
 
-function _apply!(b::Forest, ::MDDLte, f::Terminal{Value}, g::Terminal{Value})
+function _apply!(b::Forest, ::MDDLte, f::Terminal{DomainValue}, g::Terminal{DomainValue})
     value!(b, f.value <= g.value)
 end
 
 ### Lt
 
-function _apply!(b::Forest, ::MDDLt, f::Terminal{Value}, g::Terminal{Value})
+function _apply!(b::Forest, ::MDDLt, f::Terminal{DomainValue}, g::Terminal{DomainValue})
     value!(b, f.value < g.value)
 end
 
 ### Gte
 
-function _apply!(b::Forest, ::MDDGte, f::Terminal{Value}, g::Terminal{Value})
+function _apply!(b::Forest, ::MDDGte, f::Terminal{DomainValue}, g::Terminal{DomainValue})
     value!(b, f.value >= g.value)
 end
 
 ### Gt
 
-function _apply!(b::Forest, ::MDDGt, f::Terminal{Value}, g::Terminal{Value})
+function _apply!(b::Forest, ::MDDGt, f::Terminal{DomainValue}, g::Terminal{DomainValue})
     value!(b, f.value > g.value)
 end
 
 ### Eq
 
-function _apply!(b::Forest, ::MDDEq, f::Terminal{Value}, g::Terminal{Value})
+function _apply!(b::Forest, ::MDDEq, f::Terminal{DomainValue}, g::Terminal{DomainValue})
     value!(b, f.value == g.value)
 end
 
@@ -677,7 +680,7 @@ end
 
 ### Neq
 
-function _apply!(b::Forest, ::MDDNeq, f::Terminal{Value}, g::Terminal{Value})
+function _apply!(b::Forest, ::MDDNeq, f::Terminal{DomainValue}, g::Terminal{DomainValue})
     value!(b, f.value != g.value)
 end
 
@@ -699,7 +702,7 @@ end
 
 ### if
 
-for v = [:Value, :Bool, :Nothing]
+for v = [:DomainValue, :Bool, :Nothing]
     @eval function _apply!(b::Forest, ::MDDIf, f::Terminal{Bool}, g::Terminal{$v})
         if f.value == true
             g
@@ -715,7 +718,7 @@ end
 
 ### else
 
-for v = [:Value, :Bool, :Nothing]
+for v = [:DomainValue, :Bool, :Nothing]
     @eval function _apply!(b::Forest, ::MDDElse, f::Terminal{Bool}, g::Terminal{$v})
         if f.value == false
             g
@@ -731,7 +734,7 @@ end
 
 ### Union
 
-for v = [:Value, :Bool]
+for v = [:DomainValue, :Bool]
     @eval function _apply!(::Forest, ::MDDUnion, f::Terminal{Nothing}, g::Terminal{$v})
         g
     end
@@ -745,7 +748,7 @@ function _apply!(b::Forest, ::MDDUnion, f::Terminal{Nothing}, g::Terminal{Nothin
     b.undet
 end
 
-# function _apply!(b::Forest, ::MDDUnion, f::Terminal{Tx}, g::Terminal{Ty}) where {Tx <: Union{Value, Bool}, Ty <: Union{Value, Bool}}
+# function _apply!(b::Forest, ::MDDUnion, f::Terminal{Tx}, g::Terminal{Ty}) where {Tx <: Union{DomainValue, Bool}, Ty <: Union{DomainValue, Bool}}
 #     throw(ErrorException("There exists a conflict condition."))
 # end
 
@@ -834,7 +837,7 @@ Create MDD forest with the reduction policy. Note the policy QuasiReduced has no
 mdd(policy::AbstractPolicy = FullyReduced()) = Forest(policy)
 
 """
-    defvar!(b::Forest, name::Symbol, level::Int, domain::AbstractVector{Value})
+    defvar!(b::Forest, name::Symbol, level::Int, domain::AbstractVector{DomainValue})
 
 Define a new variable in MDD
 - b: Forest
@@ -842,7 +845,7 @@ Define a new variable in MDD
 - level: Level in MDD
 - domain: Domain of a variable
 """
-function defvar!(b::Forest, name::Symbol, level::Int, domain::AbstractVector{Value})
+function defvar!(b::Forest, name::Symbol, level::Int, domain::AbstractVector{DomainValue})
     h = NodeHeader(_get_next!(b.hmgr), Level(level), name, collect(domain))
     b.headers[name] = h
 end
@@ -1052,11 +1055,11 @@ Base.:(!)(x::AbstractNode) = not!(forest(x), x)
 Base.:(-)(x::AbstractNode) = minus!(forest(x), value!(forest(x), 0), x)
 
 """
-    genfunc!(b::Forest, xs::Vector{Vector{Value}})
+    genfunc!(b::Forest, xs::Vector{Vector{DomainValue}})
 
 Generate a function to MDD.
 """
-function genfunc!(b::Forest, xs::Vector{Vector{Value}})
+function genfunc!(b::Forest, xs::Vector{Vector{DomainValue}})
     vars = [var!(b, label(x)) for x = sort(collect(values(b.headers)), by=x->level(x))]
     mp = b.undet
     for x = xs

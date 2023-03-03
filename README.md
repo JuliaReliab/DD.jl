@@ -511,9 +511,10 @@ In several MDD-based algorithms, we should traverse the MDD. The package provide
 - Types
     - `NodeID`: Type for node id
     - `Level`: Type for node level
+    - `DomainValue`: Type for value (Int)
     - `AbstractNode`: An abstract type for a node
     - `AbstractNonTerminalNode <: AbstractNode`: An abstract type for a non-terminal node
-    - `AbstractTerminalNode <: AbstractNode`: An abstract type for a terminal node
+    - `AbstractTerminalNode{T} <: AbstractNode`: An abstract type for a terminal node. T (DomainValue or Bool) is a type of value. When T is Nothing, the terminal node indicates the corresponding value is undefined.
 - Functions
     - `id(x)`: Get the ID of a node.
     - `level(x)`: Get a level of a node or a header.

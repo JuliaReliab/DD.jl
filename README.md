@@ -478,6 +478,28 @@ result = and(f >= 0, f < 2)
 g = ifthenelse(result, 5, 10)
 ```
 
+Also the macro `@match` is a convenient way to create the function. `@match` is similar to the match sentence like Rust.
+
+```julia
+using DD.MDD
+
+b = mdd()
+defvar!(b, :x, 3, [0,1])
+defvar!(b, :y, 2, [0,1,2])
+defvar!(b, :z, 1, [0,1,2])
+x = var!(b, :x)
+y = var!(b, :y)
+z = var!(b, :z)
+f = @match(
+    x == 0 => 0,
+    y == 0 && z == 0 => 0,
+    y == 0 || z == 0 => 1,
+    y == 2 || z == 2 => 3,
+    _ => 2)
+```
+
+In the above example, the conditions are applied sequencially from `x==0` to `y==2`. If the variable matches the condition, the function takes the value placed on the righthand side of `=>`. The last statement indicates OTHERWISE which is represented by `_`.
+
 #### Travere MDD
 
 In several MDD-based algorithms, we should traverse the MDD. The package provides the following types and functions to traverse the MDD.

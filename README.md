@@ -271,6 +271,10 @@ Note that this function do not care the level of variables. The levels of low an
 h = Dict([k => level(v) for (k,v) = vars(b)])
 ```
 
+## ZDD
+
+not yet
+
 ## MDD
 
 ### What is MDD?

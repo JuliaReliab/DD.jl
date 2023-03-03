@@ -1,7 +1,7 @@
 name = "DD"
 uuid = "dbd003b0-366b-4bd7-bab8-1704c0e14406"
 authors = ["Hiroyuki Okamura"]
-version = "0.4.1"
+version = "0.5.0"
 
 [deps]
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"

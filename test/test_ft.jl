@@ -363,5 +363,142 @@ end
     println("MPS ", res)
 end
 
+@testset "FT10" begin
+    function prob(f::AbstractNonTerminalNode, pb, cache)
+        get!(cache, id(f)) do
+            x = label(f)
+            p = pb[x]
+            pbar = 1.0 - p
+    
+            b0 = prob(get_zero(f), pb, cache)
+            b1 = prob(get_one(f), pb, cache)
+    
+            pbar * b0 + p * b1
+        end
+    end
+    
+    function prob(f::AbstractTerminalNode, pb, cache)
+        get!(cache, id(f)) do
+            if iszero(f)
+                0.0
+            else
+                1.0
+            end
+        end
+    end
+    
+    b = bdd()
+    defvar!(b, :x, 1)
+    defvar!(b, :y, 2)
+    defvar!(b, :z, 3)
+    x = var!(b, :x)
+    y = var!(b, :y)
+    z = var!(b, :z)
+
+    f = (x + y) * z
+    println(todot(f))
+    pb = Dict(:x=>0.9, :y=>0.9, :z=>0.9)
+    cache = Dict()
+    println(prob(f, pb, cache))
+
+    # abstract type AbstractEdge end
+
+    # struct EdgeRoot <: AbstractEdge end
+
+    # struct Edge0 <: AbstractEdge
+    #     parent::AbstractNode
+    # end
+
+    # struct Edge1 <: AbstractEdge
+    #     parent::AbstractNode
+    # end
+
+    # function makegraph(f::AbstractNonTerminalNode, parent, res, visited)
+    #     parents = get(res, id(f), AbstractEdge[])
+    #     push!(parents, parent)
+    #     res[id(f)] = parents
+    #     if !in(id(f), visited)
+    #         makegraph(get_zero(f), Edge0(f), res, visited)
+    #         makegraph(get_one(f), Edge1(f), res, visited)
+    #         push!(visited, id(f))
+    #     end
+    # end
+
+    # function makegraph(f::AbstractTerminalNode, parent, res, visited)
+    #     parents = get(res, id(f), AbstractEdge[])
+    #     push!(parents, parent)
+    #     res[id(f)] = parents
+    # end
+
+    result = reversetree(f)
+    println(result)
+
+    function grad(f::EdgeRoot, pb, values, edges, gradedge, gradpb)
+        1.0
+    end
+
+    function grad(f::AbstractEdge, pb, values, edges, gradedge, gradpb)
+        get(gradedge, f) do
+            nodegrad(f.parent, pb, values, edges, gradedge, gradpb)
+            gradedge[f]
+        end
+    end
+
+    function nodegrad(f::AbstractNode, pb, values, edges, gradedge, gradpb)
+        local x = label(f)
+        p = pb[x]
+        pbar = 1.0 - p
+
+        local x0 = values[id(get_zero(f))]
+        local x1 = values[id(get_one(f))]
+
+        local glow = 0.0
+        local ghigh = 0.0
+        local gpb = 0.0
+        for e = edges[id(f)]
+            gout = grad(e, pb, values, edges, gradedge, gradpb)
+            ghigh += gout * p
+            glow += gout * pbar
+            gpb += gout * (x1-x0)
+        end
+        gradedge[Edge0(f)] = glow
+        gradedge[Edge1(f)] = ghigh
+        gradpb[x] = gpb
+        nothing
+    end
+
+    gradedge = Dict()
+    gradpb = Dict()
+
+    for e = result[id(b.one)]
+        grad(e, pb, cache, result, gradedge, gradpb)
+    end
+
+    println(gradedge)
+    println(gradpb)
+
+    # function grad(f::AbstractNonTerminalNode, pb, cache, gradcache, outid, edge)
+    #     x = label(f)
+    #     p = pb[x]
+    #     pbar = 1.0 - p
+
+    #     gout = get(gradcache, (outid, edge))
+
+    #     glow = get(gradcache, (id(f), :low), 0.0)
+    #     glow += gout * pbar
+    #     gradcache[(id(f), :low)] = glow
+
+    #     ghigh = get(gradcache, (id(f), :high), 0.0)
+    #     ghigh += gout * p
+    #     gradcache[(id(f), :high)] = ghigh
+
+    #     gpb = gradcache[x]
+    #     x0 = cache[id(get_zero(f))]
+    #     x1 = cache[id(get_one(f))]
+    #     gpb += gout * (x1-x0)
+    #     gradcache[x] = gpb
+    # end
+end
+
 end
 

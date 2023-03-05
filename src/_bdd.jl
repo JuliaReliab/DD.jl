@@ -873,5 +873,6 @@ function genfunc!(b::Forest, xs::Vector{Vector{Bool}})
     mp
 end
 
+include("_bdd_utils.jl")
 
 end

@@ -1,3 +1,7 @@
+# 0.5.1
+
+- EVMDD (experimental)
+
 # 0.5.0
 
 - Add mdd

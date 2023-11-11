@@ -1,0 +1,16 @@
+{
+    "name": "myjulia",
+    "image": "okamumu/julia:1.8.3-arduino",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+				"mhutchie.git-graph",
+				"julialang.language-julia"
+			],
+            "settings": {
+                "julia.executablePath": "/opt/julia/bin/julia",
+                "editor.acceptSuggestionOnEnter": "off"
+            }
+        }
+    }
+}

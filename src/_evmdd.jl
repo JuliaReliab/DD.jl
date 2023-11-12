@@ -277,13 +277,26 @@ Base.iszero(x::OneTerminal) = false
 Base.iszero(x::ZeroTerminal) = true
 
 forest(f::AbstractNode) = f.b
+
 todot(f::AbstractNode) = todot(forest(f), f)
+todot(f::AbstractEdge) = todot(forest(f), f)
 
 function todot(b::Forest, f::AbstractNode)
     io = IOBuffer()
     visited = Set{NodeID}()
     println(io, "digraph { layout=dot; overlap=false; splines=true; node [fontsize=10];")
     _todot!(b, f, visited, io)
+    println(io, "}")
+    String(take!(io))
+end
+
+function todot(b::Forest, f::AbstractEdge)
+    io = IOBuffer()
+    visited = Set{NodeID}()
+    println(io, "digraph { layout=dot; overlap=false; splines=true; node [fontsize=10];")
+    println(io, "\"objroot\" [shape = circle, label = \"\"];")
+    println(io, "\"objroot\" -> \"obj$(f.node.id)\" [label = \"($(f.val))\"];")
+    _todot!(b, f.node, visited, io)
     println(io, "}")
     String(take!(io))
 end
@@ -328,6 +341,11 @@ function Base.size(f::AbstractNode)
     (length(visited), edges)
 end
 
+function Base.size(f::AbstractEdge)
+    (nn, ne) = Base.size(f.node)
+    (nn, ne+1)
+end
+
 function _size!(b::Forest, f::AbstractTerminalNode, visited::Set{NodeID})
     if in(f.id, visited)
         return 0
@@ -368,7 +386,8 @@ function mdd2evmdd(x::MDD.AbstractNode)
     for (name,h) = b.headers
         defvar!(b2, name, h.level, h.domain)
     end
-    _mdd2evpmdd(b, x, b2, cache)
+    (v, n) = _mdd2evpmdd(b, x, b2, cache)
+    edge!(b2, v, n)
 end
 
 function _mdd2evpmdd(b::MDD.Forest, f::MDD.AbstractTerminalNode, b2::Forest, cache)

@@ -93,7 +93,7 @@ using Test
 
     x = x6dash
     println(MDD.size(x))
-    (v, f0) = mdd2evmdd(x)
+    f0 = mdd2evmdd(x) # return an edge
     println(EVMDD.size(f0))
 end
 

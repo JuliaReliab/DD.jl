@@ -380,34 +380,38 @@ function defvar!(b::Forest, name::Symbol, level::Level, domain::AbstractVector{D
 end
 
 function mdd2evmdd(x::MDD.AbstractNode)
+    evmddforest = Forest()
+    mdd2evmdd(evmddforest, x)
+end
+
+function mdd2evmdd(evmddforest::Forest, x::MDD.AbstractNode)
     b = MDD.forest(x)
     cache = Dict()
-    b2 = Forest()
     for (name,h) = b.headers
-        defvar!(b2, name, h.level, h.domain)
+        defvar!(evmddforest, name, h.level, h.domain)
     end
-    (v, n) = _mdd2evpmdd(b, x, b2, cache)
-    edge!(b2, v, n)
+    (v, n) = _mdd2evpmdd(b, x, evmddforest, cache)
+    edge!(evmddforest, v, n)
 end
 
-function _mdd2evpmdd(b::MDD.Forest, f::MDD.AbstractTerminalNode, b2::Forest, cache)
+function _mdd2evpmdd(b::MDD.Forest, f::MDD.AbstractTerminalNode, evmddforest::Forest, cache)
     get!(cache, f.id) do
-        (f.value, b2.one)
+        (f.value, evmddforest.one)
     end
 end
 
-function _mdd2evpmdd(b::MDD.Forest, f::MDD.AbstractTerminalNode{Nothing}, b2::Forest, cache)
+function _mdd2evpmdd(b::MDD.Forest, f::MDD.AbstractTerminalNode{Nothing}, evmddforest::Forest, cache)
     get!(cache, f.id) do
-        (f.value, b2.zero)
+        (f.value, evmddforest.zero)
     end
 end
 
-function _mdd2evpmdd(b::MDD.Forest, f::MDD.AbstractNonTerminalNode, b2::Forest, cache)
+function _mdd2evpmdd(b::MDD.Forest, f::MDD.AbstractNonTerminalNode, evmddforest::Forest, cache)
     get!(cache, f.id) do
         tmp = []
         tmpv = []
         for (i,x) = enumerate(f.header.domain)
-            (v, n) = _mdd2evpmdd(b, f.nodes[i], b2, cache)
+            (v, n) = _mdd2evpmdd(b, f.nodes[i], evmddforest, cache)
             push!(tmp, (v, n))
             if !isnothing(v)
                 push!(tmpv, v)
@@ -417,12 +421,12 @@ function _mdd2evpmdd(b::MDD.Forest, f::MDD.AbstractNonTerminalNode, b2::Forest, 
         edges = AbstractEdge[]
         for (v, n) = tmp
             if !isnothing(v)
-                push!(edges, edge!(b2, v-minv, n))
+                push!(edges, edge!(evmddforest, v-minv, n))
             else
-                push!(edges, edge!(b2, v, n))
+                push!(edges, edge!(evmddforest, v, n))
             end
         end
-        (minv, node!(b2, b2.headers[f.header.label], edges))
+        (minv, node!(evmddforest, evmddforest.headers[f.header.label], edges))
     end
 end
 

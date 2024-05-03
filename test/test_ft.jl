@@ -363,6 +363,25 @@ end
     println("MPS ", res)
 end
 
+@testset "FT4-4" begin
+    b = bdd()
+    defvar!(b, :A, 1)
+    defvar!(b, :B, 2)
+    defvar!(b, :C, 3)
+    A = var!(b, :A)
+    B = var!(b, :B)
+    C = var!(b, :C)
+
+    f = A ⊻ (B * C)
+
+    println(todot(f))
+    res = mcs(b, f)
+    println("MCS ", res)
+
+    res = mps(b, f)
+    println("MPS ", res)
+end
+
 @testset "FT10" begin
     function prob(f::AbstractNonTerminalNode, pb, cache)
         get!(cache, id(f)) do

@@ -839,8 +839,10 @@ ifthenelse(f::AbstractNode, g::Bool, h::Bool) = ifthenelse!(forest(f), f, g, h)
 ifthenelse(f::Bool, g::AbstractNode, h::Bool) = ifthenelse!(forest(g), f, g, h)
 ifthenelse(f::Bool, g::Bool, h::AbstractNode) = ifthenelse!(forest(h), f, g, h)
 
-ops = [:(==), :(!=), :(&), :(|), :(⊻), :(*), :(+)]
-fns = [:eq, :neq, :and, :or, :xor, :and, :or]
+# ops = [:(==), :(!=), :(&), :(|), :(⊻), :(*), :(+)]
+# fns = [:eq, :neq, :and, :or, :xor, :and, :or]
+ops = [:(==), :(!=), :(&), :(|), :(*), :(+)]
+fns = [:eq, :neq, :and, :or, :and, :or]
 
 for (op, fn) = zip(ops, fns)
     @eval Base.$op(x::AbstractNode, y::AbstractNode) = $fn(x, y)

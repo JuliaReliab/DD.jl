@@ -1,3 +1,7 @@
+# 0.5.2
+
+- fix a bug: xor in bdd
+
 # 0.5.1
 
 - EVMDD (experimental)

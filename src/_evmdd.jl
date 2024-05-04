@@ -264,9 +264,9 @@ function defvar!(b::Forest, name::Symbol, level::Int, domain::AbstractVector{Dom
     b.headers[name] = h
 end
 
-# function forest(f::AbstractNode)
-#     f.b
-# end
+function forest(f::AbstractNode)
+    f.b
+end
 
 Base.isone(x::AbstractNonTerminalNode) = false
 Base.isone(x::OneTerminal) = true
@@ -276,7 +276,7 @@ Base.iszero(x::AbstractNonTerminalNode) = false
 Base.iszero(x::OneTerminal) = false
 Base.iszero(x::ZeroTerminal) = true
 
-forest(f::AbstractNode) = f.b
+# forest(f::AbstractNode) = f.b
 
 todot(f::AbstractNode) = todot(forest(f), f)
 todot(f::AbstractEdge) = todot(forest(f), f)
@@ -369,10 +369,10 @@ function _size!(b::Forest, f::Node, visited::Set{NodeID})
     return tmp
 end
 
-function defvar!(b::Forest, name::Symbol, level::Int, domain::AbstractVector{DomainValue})
-    h = NodeHeader(_get_next!(b.hmgr), Level(level), name, collect(domain))
-    b.headers[name] = h
-end
+# function defvar!(b::Forest, name::Symbol, level::Int, domain::AbstractVector{DomainValue})
+#     h = NodeHeader(_get_next!(b.hmgr), Level(level), name, collect(domain))
+#     b.headers[name] = h
+# end
 
 function defvar!(b::Forest, name::Symbol, level::Level, domain::AbstractVector{DomainValue})
     h = NodeHeader(_get_next!(b.hmgr), level, name, collect(domain))

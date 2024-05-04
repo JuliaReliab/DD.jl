@@ -264,9 +264,9 @@ function defvar!(b::Forest, name::Symbol, level::Int, domain::AbstractVector{Dom
     b.headers[name] = h
 end
 
-function forest(f::AbstractNode)
-    f.b
-end
+# function forest(f::AbstractNode)
+#     f.b
+# end
 
 Base.isone(x::AbstractNonTerminalNode) = false
 Base.isone(x::OneTerminal) = true

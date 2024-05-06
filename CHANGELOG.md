@@ -1,3 +1,7 @@
+# 0.5.3
+
+- add size for BDD
+
 # 0.5.2
 
 - fix a bug: xor in bdd

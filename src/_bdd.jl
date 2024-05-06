@@ -665,6 +665,33 @@ end
 
 ### utilities
 
+function Base.size(f::AbstractNode)
+    b = forest(f)
+    visited = Set{NodeID}()
+    edges = _size!(b, f, visited)
+    (length(visited), edges)
+end
+
+function _size!(b::Forest, f::AbstractTerminalNode, visited::Set{NodeID})
+    if in(f.id, visited)
+        return 0
+    end
+    push!(visited, f.id)
+    return 0
+end
+
+function _size!(b::Forest, f::Node, visited::Set{NodeID})
+    if in(f.id, visited)
+        return 0
+    end
+    tmp = _size!(b, f.low, visited)
+    tmp += 1
+    tmp += _size!(b, f.high, visited)
+    tmp += 1
+    push!(visited, f.id)
+    return tmp
+end
+
 """
    bdd(policy::AbstractPolicy = FullyReduced())
 

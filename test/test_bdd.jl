@@ -91,6 +91,7 @@ end
     z = var!(b, :z)
     result1 = imp(x, y)
     println(todot(result1))
+    println(size(result1))
 end
 
 @testset "BDD7" begin

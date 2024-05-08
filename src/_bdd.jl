@@ -78,6 +78,10 @@ The type for node level.
 """
 const Level = UInt
 
+const HashKey = Tuple{NodeID,NodeID,NodeID}
+
+Base.hash(mt::HashKey, h::UInt) = mt[1] + (mt[2] << 16) + (mt[3] << 32)
+
 """
     AbstractOperator
     AbstractUnaryOperator <: AbstractOperator
@@ -98,12 +102,31 @@ Types for operations.
 abstract type AbstractOperator end
 abstract type AbstractUnaryOperator <: AbstractOperator end
 abstract type AbstractBinaryOperator <: AbstractOperator end
-struct NotOperator <: AbstractUnaryOperator end
-struct AndOperator <: AbstractBinaryOperator end
-struct OrOperator <: AbstractBinaryOperator end
-struct XorOperator <: AbstractBinaryOperator end
-struct EqOperator <: AbstractBinaryOperator end
 
+struct NotOperator <: AbstractUnaryOperator
+    id::NodeID
+    NotOperator() = new(NodeID(1001))
+end
+
+struct AndOperator <: AbstractBinaryOperator
+    id::NodeID
+    AndOperator() = new(NodeID(2002))
+end
+
+struct OrOperator <: AbstractBinaryOperator
+    id::NodeID
+    OrOperator() = new(NodeID(3003))
+end
+
+struct XorOperator <: AbstractBinaryOperator
+    id::NodeID
+    XorOperator() = new(NodeID(4004))
+end
+
+struct EqOperator <: AbstractBinaryOperator
+    id::NodeID
+    EqOperator() = new(NodeID(5005))
+end
 
 """
     AbstractPolicy
@@ -172,10 +195,10 @@ mutable struct Forest
     mgr::NodeManager
     hmgr::NodeManager
     headers::Dict{Symbol,NodeHeader}
-    utable::Dict{Tuple{NodeID,NodeID,NodeID},AbstractNode}
+    utable::Dict{HashKey,AbstractNode}
     zero::AbstractTerminalNode
     one::AbstractTerminalNode
-    cache::Dict{Tuple{AbstractOperator,NodeID,NodeID},AbstractNode}
+    cache::Dict{Tuple{NodeID,NodeID,NodeID},AbstractNode}
     policy::AbstractPolicy
 
     function Forest(policy::AbstractPolicy)
@@ -183,7 +206,7 @@ mutable struct Forest
         b.mgr = NodeManager(0)
         b.hmgr = NodeManager(0)
         b.headers = Dict{Symbol,NodeHeader}()
-        b.utable = Dict{Tuple{NodeID,NodeID,NodeID},AbstractNode}()
+        b.utable = Dict{HashKey,AbstractNode}()
         b.zero = Terminal(b, _get_next!(b.mgr), false)
         b.one = Terminal(b, _get_next!(b.mgr), true)
         b.cache = Dict{Tuple{AbstractOperator,NodeID,NodeID},AbstractNode}()
@@ -456,7 +479,7 @@ function apply!(b::Forest, op::AbstractBinaryOperator, f::Bool, g::Bool)
 end
 
 function _apply!(b::Forest, op::AbstractUnaryOperator, f::AbstractNonTerminalNode)
-    key = (op, f.id, b.zero.id)
+    key = (op.id, f.id, b.zero.id)
     get!(b.cache, key) do
         low = _apply!(b, op, f.low)
         high = _apply!(b, op, f.high)
@@ -465,7 +488,7 @@ function _apply!(b::Forest, op::AbstractUnaryOperator, f::AbstractNonTerminalNod
 end
 
 function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNode, g::AbstractNonTerminalNode)
-    key = (op, f.id, g.id)
+    key = (op.id, f.id, g.id)
     get!(b.cache, key) do
         if f.header.level > g.header.level
             low = _apply!(b, op, f.low, g)
@@ -484,7 +507,7 @@ function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNo
 end
 
 function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractTerminalNode, g::AbstractNonTerminalNode)
-    key = (op, f.id, g.id)
+    key = (op.id, f.id, g.id)
     get!(b.cache, key) do
         low = _apply!(b, op, f, g.low)
         high = _apply!(b, op, f, g.high)
@@ -493,7 +516,7 @@ function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractTerminalNode,
 end
 
 function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNode, g::AbstractTerminalNode)
-    key = (op, f.id, g.id)
+    key = (op.id, f.id, g.id)
     get!(b.cache, key) do
         low = _apply!(b, op, f.low, g)
         high = _apply!(b, op, f.high, g)
@@ -515,7 +538,7 @@ function _apply!(b::Forest, op::EqOperator, f::AbstractNonTerminalNode, g::Abstr
     if f === g
         return b.one
     end
-    key = (op, f.id, g.id)
+    key = (op.id, f.id, g.id)
     get(b.cache, key) do
         if f.header.level > g.header.level
             low = _apply!(b, op, f.low, g)
@@ -538,7 +561,7 @@ function _apply!(b::Forest, op::EqOperator, f::AbstractTerminalNode, g::Abstract
     if f === g
         return b.one
     end
-    key = (op, f.id, g.id)
+    key = (op.id, f.id, g.id)
     get(b.cache, key) do
         low = _apply!(b, op, f, g.low)
         high = _apply!(b, op, f, g.high)
@@ -551,7 +574,7 @@ function _apply!(b::Forest, op::EqOperator, f::AbstractNonTerminalNode, g::Abstr
     if f === g
         return b.one
     end
-    key = (op, f.id, g.id)
+    key = (op.id, f.id, g.id)
     get(b.cache, key) do
         low = _apply!(b, op, f.low, g)
         high = _apply!(b, op, f.high, g)

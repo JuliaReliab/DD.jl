@@ -80,7 +80,7 @@ const Level = UInt
 
 const HashKey = Tuple{NodeID,NodeID,NodeID}
 
-Base.hash(mt::HashKey, h::UInt) = mt[1] + (mt[2] << 16) + (mt[3] << 32)
+# Base.hash(mt::HashKey, h::UInt) = mt[1] + (mt[2] << 16) + (mt[3] << 32)
 
 """
     AbstractOperator

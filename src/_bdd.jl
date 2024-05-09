@@ -4,7 +4,8 @@ BDD Module
 
 module BDD
 
-import Base: show
+import Base: show, hash
+using XXhash
 
 export AbstractNode
 export AbstractNonTerminalNode
@@ -80,7 +81,7 @@ const Level = UInt
 
 const HashKey = Tuple{NodeID,NodeID,NodeID}
 
-# Base.hash(mt::HashKey, h::UInt) = mt[1] + (mt[2] << 16) + (mt[3] << 32)
+Base.hash(mt::HashKey, h::UInt) = xxh64(mt)
 
 """
     AbstractOperator

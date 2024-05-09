@@ -81,7 +81,7 @@ const Level = UInt
 
 const HashKey = Tuple{NodeID,NodeID,NodeID}
 
-Base.hash(mt::HashKey, h::UInt) = xxh64(mt)
+# Base.hash(mt::HashKey, h::UInt) = xxh64(mt)
 
 """
     AbstractOperator

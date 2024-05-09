@@ -79,9 +79,12 @@ The type for node level.
 """
 const Level = UInt
 
-const HashKey = Tuple{NodeID,NodeID,NodeID}
+struct HashKey
+    key::Tuple{NodeID,NodeID,NodeID}
+    HashKey(a::NodeID, b::NodeID, c::NodeID) = new((a,b,c))
+end
 
-Base.hash(mt::HashKey, h::UInt) = xxh3_64(mt)
+Base.hash(mt::HashKey, h::UInt) = xxh3_64(mt.key)
 
 """
     AbstractOperator
@@ -199,7 +202,7 @@ mutable struct Forest
     utable::Dict{HashKey,AbstractNode}
     zero::AbstractTerminalNode
     one::AbstractTerminalNode
-    cache::Dict{Tuple{NodeID,NodeID,NodeID},AbstractNode}
+    cache::Dict{HashKey,AbstractNode}
     policy::AbstractPolicy
 
     function Forest(policy::AbstractPolicy)
@@ -210,7 +213,7 @@ mutable struct Forest
         b.utable = Dict{HashKey,AbstractNode}()
         b.zero = Terminal(b, _get_next!(b.mgr), false)
         b.one = Terminal(b, _get_next!(b.mgr), true)
-        b.cache = Dict{Tuple{AbstractOperator,NodeID,NodeID},AbstractNode}()
+        b.cache = Dict{HashKey,AbstractNode}()
         b.policy = policy
         b
     end
@@ -375,7 +378,7 @@ function _node!(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode,
     if low.id == high.id
         return low
     end
-    key = (h.id, low.id, high.id)
+    key = HashKey(h.id, low.id, high.id)
     get(b.utable, key) do
         id = _get_next!(b.mgr)
         b.utable[key] = Node(b, id, h, low, high)
@@ -383,7 +386,7 @@ function _node!(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode,
 end
 
 function _node!(b::Forest, h::NodeHeader, low::AbstractNode, high::AbstractNode, ::QuasiReduced)
-    key = (h.id, low.id, high.id)
+    key = HashKey(h.id, low.id, high.id)
     get(b.utable, key) do
         id = _get_next!(b.mgr)
         b.utable[key] = Node(b, id, h, low, high)
@@ -480,7 +483,7 @@ function apply!(b::Forest, op::AbstractBinaryOperator, f::Bool, g::Bool)
 end
 
 function _apply!(b::Forest, op::AbstractUnaryOperator, f::AbstractNonTerminalNode)
-    key = (op.id, f.id, b.zero.id)
+    key = HashKey(op.id, f.id, b.zero.id)
     get!(b.cache, key) do
         low = _apply!(b, op, f.low)
         high = _apply!(b, op, f.high)
@@ -489,7 +492,7 @@ function _apply!(b::Forest, op::AbstractUnaryOperator, f::AbstractNonTerminalNod
 end
 
 function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNode, g::AbstractNonTerminalNode)
-    key = (op.id, f.id, g.id)
+    key = HashKey(op.id, f.id, g.id)
     get!(b.cache, key) do
         if f.header.level > g.header.level
             low = _apply!(b, op, f.low, g)
@@ -508,7 +511,7 @@ function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNo
 end
 
 function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractTerminalNode, g::AbstractNonTerminalNode)
-    key = (op.id, f.id, g.id)
+    key = HashKey(op.id, f.id, g.id)
     get!(b.cache, key) do
         low = _apply!(b, op, f, g.low)
         high = _apply!(b, op, f, g.high)
@@ -517,7 +520,7 @@ function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractTerminalNode,
 end
 
 function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNode, g::AbstractTerminalNode)
-    key = (op.id, f.id, g.id)
+    key = HashKey(op.id, f.id, g.id)
     get!(b.cache, key) do
         low = _apply!(b, op, f.low, g)
         high = _apply!(b, op, f.high, g)
@@ -539,7 +542,7 @@ function _apply!(b::Forest, op::EqOperator, f::AbstractNonTerminalNode, g::Abstr
     if f === g
         return b.one
     end
-    key = (op.id, f.id, g.id)
+    key = HashKey(op.id, f.id, g.id)
     get(b.cache, key) do
         if f.header.level > g.header.level
             low = _apply!(b, op, f.low, g)
@@ -562,7 +565,7 @@ function _apply!(b::Forest, op::EqOperator, f::AbstractTerminalNode, g::Abstract
     if f === g
         return b.one
     end
-    key = (op.id, f.id, g.id)
+    key = HashKey(op.id, f.id, g.id)
     get(b.cache, key) do
         low = _apply!(b, op, f, g.low)
         high = _apply!(b, op, f, g.high)
@@ -575,7 +578,7 @@ function _apply!(b::Forest, op::EqOperator, f::AbstractNonTerminalNode, g::Abstr
     if f === g
         return b.one
     end
-    key = (op.id, f.id, g.id)
+    key = HashKey(op.id, f.id, g.id)
     get(b.cache, key) do
         low = _apply!(b, op, f.low, g)
         high = _apply!(b, op, f.high, g)

@@ -80,11 +80,14 @@ The type for node level.
 const Level = UInt
 
 struct HashKey
-    key::Tuple{NodeID,NodeID,NodeID}
-    HashKey(a::NodeID, b::NodeID, c::NodeID) = new((a,b,c))
+    key1::NodeID
+    key2::NodeID
+    key3::NodeID
+
+    HashKey(a::NodeID, b::NodeID, c::NodeID) = new(a,b,c)
 end
 
-Base.hash(mt::HashKey, h::UInt) = xxh3_64(mt.key)
+Base.hash(mt::HashKey, h::UInt) = xxh3_64((mt.key1, mt.key2, mt.key3), h)
 
 """
     AbstractOperator

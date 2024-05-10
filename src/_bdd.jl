@@ -87,7 +87,7 @@ struct HashKey
     HashKey(a::NodeID, b::NodeID, c::NodeID) = new(a,b,c)
 end
 
-Base.hash(mt::HashKey, h::UInt) = xxh3_64((mt.key1, mt.key2, mt.key3), h)
+Base.hash(mt::HashKey, h::UInt) = Base.hash((mt.key1, mt.key2, mt.key3), h)
 
 """
     AbstractOperator

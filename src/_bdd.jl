@@ -5,7 +5,6 @@ BDD Module
 module BDD
 
 import Base: show, hash
-using XXhash
 
 export AbstractNode
 export AbstractNonTerminalNode

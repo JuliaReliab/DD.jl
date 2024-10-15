@@ -134,6 +134,7 @@ struct MDDNeq <: AbstractBinaryOperator end
 struct MDDAnd <: AbstractBinaryOperator end
 struct MDDOr <: AbstractBinaryOperator end
 struct MDDNot <: AbstractUnaryOperator end
+struct MDDReplaceNothing <: AbstractUnaryOperator end
 struct MDDIf <: AbstractBinaryOperator end
 struct MDDElse <: AbstractBinaryOperator end
 struct MDDUnion <: AbstractBinaryOperator end
@@ -588,6 +589,12 @@ function _apply!(b::Forest, ::MDDNot, f::Terminal{Bool})
     value!(b, !f.value)
 end
 
+### ReplaceNothing
+
+function _apply!(b::Forest, ::MDDReplaceNothing, f::Terminal{Nothing})
+    value!(b, false)
+end
+
 ### for nothing
 
 for op = [:MDDMin, :MDDMax, :MDDPlus, :MDDMinus, :MDDMul, :MDDLte, :MDDLt, :MDDGte, :MDDGt, :MDDEq, :MDDNeq]
@@ -953,6 +960,15 @@ NOT operation.
 """
 function not!(b::Forest, x)
     apply!(b, MDDNot(), x)
+end
+
+"""
+    replacenothing!(b::Forest, x::AbstractNode)
+
+REPLACE nothing to false
+"""
+function replacenohting!(b::Forest, x)
+    apply!(b, MDDReplaceNothing(), x)
 end
 
 """

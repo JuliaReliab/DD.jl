@@ -1,3 +1,7 @@
+# 0.5.2
+
+- Replace Nothing for MDD
+
 # 0.5.1
 
 - EVMDD (experimental)

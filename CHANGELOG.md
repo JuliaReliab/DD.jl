@@ -1,3 +1,7 @@
+# 0.5.4
+
+- add replacenothing for MDD
+
 # 0.5.3
 
 - add size for BDD

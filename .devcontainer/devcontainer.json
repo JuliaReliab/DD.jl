@@ -1,14 +1,18 @@
 {
     "name": "myjulia",
-    "image": "okamumu/julia:1.8.3-arduino",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
     "customizations": {
         "vscode": {
             "extensions": [
-				"mhutchie.git-graph",
-				"julialang.language-julia"
-			],
+                "mhutchie.git-graph",
+                "julialang.language-julia",
+                "ms-toolsai.jupyter"
+            ],
             "settings": {
-                "julia.executablePath": "/opt/julia/bin/julia",
+                "workbench.colorTheme": "Default Light Modern",
+                "julia.executablePath": "/usr/local/julia/bin/julia",
                 "editor.acceptSuggestionOnEnter": "off"
             }
         }

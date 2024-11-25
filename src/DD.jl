@@ -10,4 +10,6 @@ include("_mdd.jl")
 # include("_mss.jl")
 include("_evmdd.jl")
 
+include("_sdd.jl")
+
 end

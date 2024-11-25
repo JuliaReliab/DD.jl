@@ -199,7 +199,7 @@ end
 
 mutable struct Forest
     mgr::NodeManager
-    vars::Dict{Symbol,NamedTuple{(:T,:F),Tuple{AbstractNode,AbstractNode}}}
+    vars::Dict{Symbol,AbstractNode}
     headers::Dict{NodeID,SDDHeader}
     vtree::AbstractVtreeNode
     utable::Dict{Tuple{NodeID,Vector{NodeID}},AbstractNode}
@@ -219,7 +219,7 @@ mutable struct Forest
         b.T = SDDTerminalConstantNode(b, _get_next!(b.mgr), true)
         b.F = SDDTerminalConstantNode(b, _get_next!(b.mgr), false)
         b.cache = Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode}()
-        b.vars = Dict{Symbol,NamedTuple{(:T,:F),Tuple{AbstractNode,AbstractNode}}}()
+        b.vars = Dict{Symbol,AbstractNode}()
         b.headers = Dict{NodeID,SDDHeader}()
         _make_headers!(b, vtree)
         b
@@ -253,7 +253,8 @@ function _make_headers!(b::Forest, v::AbstractVtreeNode)
         tmp = Set([v.var])
         h = SDDHeader(v.id, v, tmp)
         b.headers[v.id] = h
-        b.vars[v.var] = (T=_var!(b, h, true), F=_var!(b, h, false))
+        b.vars[v.var] = _var!(b, h, true)
+        _ = _var!(b, h, false)
         return tmp
     end
     left = _make_headers!(b, v.left)
@@ -447,9 +448,9 @@ end
 function not!(b::Forest, n::AbstractVarTerminalNode; cache::Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode})
     get!(cache, (n.id, 0, :not)) do
         if n.value
-            b.vars[first(n.header.vars)].F
+            _var!(b, n.header, false)
         else
-            b.vars[first(n.header.vars)].T
+            _var!(b, n.header, true)
         end
     end
 end
@@ -484,7 +485,7 @@ function _apply!(b::Forest, op::AbstractOperator, f::AbstractNonTerminalNode, g:
                 for gelem = g.elements
                     p = _apply!(b, AndOperator(), felem.prime, gelem.prime, cache=cache)
                     if p != b.F
-                        s = _apply!(b, op, felem.sub, gelem.sub)
+                        s = _apply!(b, op, felem.sub, gelem.sub, cache=cache)
                         push!(elements, _element!(b, p, s))
                     end
                 end

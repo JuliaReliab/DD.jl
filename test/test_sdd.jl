@@ -56,9 +56,9 @@ end
 @testset "SDD1" begin
     v = @vtree (x < y) < z
     b = Forest(v)
-    n1 = b.vars[:x].T
-    n2 = b.vars[:x].F
-    n3 = b.vars[:y].T
+    n1 = b.vars[:x]
+    n2 = not(b.vars[:x])
+    n3 = b.vars[:y]
     e1 = _element!(b, n1, n3)
     e2 = _element!(b, n2, b.T)
     h = findheader(b, n1.header, n3.header)
@@ -71,9 +71,9 @@ end
 @testset "SDD7" begin
     v = @vtree (x < y) < z
     b = Forest(v)
-    x = b.vars[:x].T
-    y = b.vars[:y].T
-    z = b.vars[:z].T
+    x = b.vars[:x]
+    y = b.vars[:y]
+    z = b.vars[:z]
     n = _apply!(b, AndOperator(), x, y, cache=b.cache)
     n = _apply!(b, AndOperator(), n, z, cache=b.cache)
     println(todot(n))
@@ -83,10 +83,10 @@ end
     v = @vtree (B < A) < (D < C)
     println(todot(v))
     b = Forest(v)
-    va = b.vars[:A].T
-    vb = b.vars[:B].T
-    vc = b.vars[:C].T
-    vd = b.vars[:D].T
+    va = b.vars[:A]
+    vb = b.vars[:B]
+    vc = b.vars[:C]
+    vd = b.vars[:D]
     n1 = _apply!(b, AndOperator(), va, vb, cache=b.cache)
     n2 = _apply!(b, AndOperator(), vb, vc, cache=b.cache)
     n3 = _apply!(b, AndOperator(), vc, vd, cache=b.cache)
@@ -100,10 +100,22 @@ end
     v = @vtree (A < B) < (C < D)
     println(todot(v))
     b = Forest(v)
-    va = b.vars[:A].T
-    vb = b.vars[:B].T
-    vc = b.vars[:C].T
-    vd = b.vars[:D].T
+    va = b.vars[:A]
+    vb = b.vars[:B]
+    vc = b.vars[:C]
+    vd = b.vars[:D]
+    n5 = (va & vb) | (vb & vc) | (vc & vd)
+    println(todot(n5))
+end
+
+@testset "SDD9" begin
+    v = @vtree (((A < B) < C) < D)
+    println(todot(v))
+    b = Forest(v)
+    va = b.vars[:A]
+    vb = b.vars[:B]
+    vc = b.vars[:C]
+    vd = b.vars[:D]
     n5 = (va & vb) | (vb & vc) | (vc & vd)
     println(todot(n5))
 end

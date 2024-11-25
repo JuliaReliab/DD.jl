@@ -1,6 +1,7 @@
 module SDDTest
 
 using DD.SDD: VtreeVarNode, VtreeNode, Forest, getvars, _var!, _element!, _node!, make_vtree, @vtree, NodeManager, todot, findheader, _apply!, not
+using DD.SDD: AndOperator, OrOperator
 using Test
 
 # import DD.SDD: SDDForest, NodeHeader, Terminal, Node, AbstractNode, todot, apply!, SDDMin, SDDMax
@@ -73,8 +74,8 @@ end
     x = b.vars[:x].T
     y = b.vars[:y].T
     z = b.vars[:z].T
-    n = _apply!(b, Val{:and}(), x, y)
-    n = _apply!(b, Val{:and}(), n, z)
+    n = _apply!(b, AndOperator(), x, y, cache=b.cache)
+    n = _apply!(b, AndOperator(), n, z, cache=b.cache)
     println(todot(n))
 end
 
@@ -86,12 +87,12 @@ end
     vb = b.vars[:B].T
     vc = b.vars[:C].T
     vd = b.vars[:D].T
-    n1 = _apply!(b, Val{:and}(), va, vb)
-    n2 = _apply!(b, Val{:and}(), vb, vc)
-    n3 = _apply!(b, Val{:and}(), vc, vd)
+    n1 = _apply!(b, AndOperator(), va, vb, cache=b.cache)
+    n2 = _apply!(b, AndOperator(), vb, vc, cache=b.cache)
+    n3 = _apply!(b, AndOperator(), vc, vd, cache=b.cache)
 
-    n4 = _apply!(b, Val{:or}(), n1, n2)
-    n5 = _apply!(b, Val{:or}(), n4, n3)
+    n4 = _apply!(b, OrOperator(), n1, n2, cache=b.cache)
+    n5 = _apply!(b, OrOperator(), n4, n3, cache=b.cache)
     println(todot(n5))
 end
 
@@ -106,25 +107,6 @@ end
     n5 = (va & vb) | (vb & vc) | (vc & vd)
     println(todot(n5))
 end
-
-# @testset "SDD8" begin
-#     v = @vtree (B < A) < (D < C)
-#     println(todot(v))
-#     b = Forest(v)
-#     va = b.vars[:A].T
-#     vb = b.vars[:B].T
-#     vc = b.vars[:C].T
-#     vd = b.vars[:D].T
-#     n1 = _apply!(b, Val{:and}(), va, vb)
-#     n2 = _apply!(b, Val{:and}(), vb, vc)
-#     n3 = _apply!(b, Val{:and}(), vc, vd)
-
-#     n4 = _apply!(b, Val{:or}(), n1, n2)
-#     n5 = _apply!(b, Val{:or}(), n4, n3)
-#     println(todot(n1))
-#     println(todot(n2))
-#     println(todot(n4))
-# end
 
 end
 

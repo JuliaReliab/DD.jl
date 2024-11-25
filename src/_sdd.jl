@@ -153,6 +153,32 @@ function _todot(v::AbstractVtreeVarNode)
     "n$(v.id) [label=\"$(v.var)\", shape=plain];\n"
 end
 
+abstract type AbstractOperator end
+
+struct AndOperator <: AbstractOperator
+    id::Symbol
+
+    function AndOperator()
+        new(:and)
+    end
+end
+
+struct OrOperator <: AbstractOperator
+    id::Symbol
+
+    function OrOperator()
+        new(:or)
+    end
+end
+
+struct NotOperator <: AbstractOperator
+    id::Symbol
+    
+    function NotOperator()
+        new(:not)
+    end
+end
+
 abstract type AbstractNode end
 abstract type AbstractNonTerminalNode <: AbstractNode end
 abstract type AbstractTerminalNode <: AbstractNode end
@@ -181,6 +207,7 @@ mutable struct Forest
     vtable::Dict{Tuple{NodeID,Bool},AbstractNode}
     T::AbstractConstantTerminalNode
     F::AbstractConstantTerminalNode
+    cache::Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode}
 
     function Forest(vtree::AbstractVtreeNode)
         b = new()
@@ -191,6 +218,7 @@ mutable struct Forest
         b.vtable = Dict{Tuple{NodeID,Bool},AbstractNode}()
         b.T = SDDTerminalConstantNode(b, _get_next!(b.mgr), true)
         b.F = SDDTerminalConstantNode(b, _get_next!(b.mgr), false)
+        b.cache = Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode}()
         b.vars = Dict{Symbol,NamedTuple{(:T,:F),Tuple{AbstractNode,AbstractNode}}}()
         b.headers = Dict{NodeID,SDDHeader}()
         _make_headers!(b, vtree)
@@ -289,7 +317,7 @@ function _node!(b::Forest, h::SDDHeader, _elements::Vector{Element})
             push!(elements, prev)
             prev = e
         else
-            prev = _element!(b, _apply!(b, Val{:or}(), prev.prime, e.prime), e.sub)
+            prev = _element!(b, _apply!(b, OrOperator(), prev.prime, e.prime, cache=b.cache), e.sub)
         end
     end
     push!(elements, prev)
@@ -416,278 +444,289 @@ function todot(x::AbstractNode)
     s
 end
 
-function not!(b::Forest, n::AbstractVarTerminalNode)
-    if n.value
-        b.vars[first(n.header.vars)].F
-    else
-        b.vars[first(n.header.vars)].T
+function not!(b::Forest, n::AbstractVarTerminalNode; cache::Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode})
+    get!(cache, (n.id, 0, :not)) do
+        if n.value
+            b.vars[first(n.header.vars)].F
+        else
+            b.vars[first(n.header.vars)].T
+        end
     end
 end
 
-function not!(b::Forest, n::AbstractConstantTerminalNode)
-    if n.value
-        b.F
-    else
-        b.T
+function not!(b::Forest, n::AbstractConstantTerminalNode; cache::Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode})
+    get!(cache, (n.id, 0, :not)) do
+        if n.value
+            b.F
+        else
+            b.T
+        end
     end
 end
 
-function not!(b::Forest, n::AbstractNonTerminalNode)
-    elements = Vector{Element}()
-    for e in n.elements
-        push!(elements, _element!(b, e.prime, not!(b, e.sub)))
-    end
-    _node!(b, n.header, elements)
-end
-
-function _apply!(b::Forest, op, f::AbstractNonTerminalNode, g::AbstractNonTerminalNode)
-    if f.header.id == g.header.id
+function not!(b::Forest, n::AbstractNonTerminalNode; cache::Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode})
+    get!(cache, (n.id, 0, :not)) do
         elements = Vector{Element}()
-        for felem = f.elements
-            for gelem = g.elements
-                p = _apply!(b, Val{:and}(), felem.prime, gelem.prime)
+        for e in n.elements
+            push!(elements, _element!(b, e.prime, not!(b, e.sub, cache=cache)))
+        end
+        _node!(b, n.header, elements)
+    end
+end
+
+## binary
+
+function _apply!(b::Forest, op::AbstractOperator, f::AbstractNonTerminalNode, g::AbstractNonTerminalNode; cache::Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode})
+    get!(cache, (f.id, g.id, op.id)) do
+        if f.header.id == g.header.id
+            elements = Vector{Element}()
+            for felem = f.elements
+                for gelem = g.elements
+                    p = _apply!(b, AndOperator(), felem.prime, gelem.prime, cache=cache)
+                    if p != b.F
+                        s = _apply!(b, op, felem.sub, gelem.sub)
+                        push!(elements, _element!(b, p, s))
+                    end
+                end
+            end
+            _node!(b, f.header, elements)
+        elseif isleft(f.header, g.header) ## g.header is left (prime) of f.header 
+            elements = Vector{Element}()
+            for felem = f.elements
+                p = _apply!(b, AndOperator(), felem.prime, g, cache=cache)
                 if p != b.F
-                    s = _apply!(b, op, felem.sub, gelem.sub)
+                    s = _apply!(b, op, felem.sub, b.T, cache=cache)
                     push!(elements, _element!(b, p, s))
                 end
             end
-        end
-        _node!(b, f.header, elements)
-    elseif isleft(f.header, g.header) ## g.header is left (prime) of f.header 
-        elements = Vector{Element}()
-        for felem = f.elements
-            p = _apply!(b, Val{:and}(), felem.prime, g)
-            if p != b.F
-                s = _apply!(b, op, felem.sub, b.T)
+            for felem = f.elements
+                p = _apply!(b, AndOperator(), felem.prime, not!(b, g, cache=cache), cache=cache)
+                if p != b.F
+                    s = _apply!(b, op, felem.sub, b.F, cache=cache)
+                    push!(elements, _element!(b, p, s))
+                end
+            end
+            _node!(b, f.header, elements)
+        elseif isright(f.header, g.header) ## g.header is right (sub) of f.header
+            elements = Vector{Element}()
+            for felem = f.elements
+                p = felem.prime
+                s = _apply!(b, op, felem.sub, g, cache=cache)
                 push!(elements, _element!(b, p, s))
             end
-        end
-        for felem = f.elements
-            p = _apply!(b, Val{:and}(), felem.prime, not!(b, g))
-            if p != b.F
-                s = _apply!(b, op, felem.sub, b.F)
+            _node!(b, f.header, elements)
+        elseif isleft(g.header, f.header) ## f.header is left (prime) of g.header
+            elements = Vector{Element}()
+            for gelem = g.elements
+                p = _apply!(b, AndOperator(), f, gelem.prime, cache=cache)
+                if p != b.F
+                    s = _apply!(b, op, b.T, gelem.sub, cache=cache)
+                    push!(elements, _element!(b, p, s))
+                end
+            end
+            for gelem = g.elements
+                p = _apply!(b, AndOperator(), not!(b, f, cache=cache), gelem.prime, cache=cache)
+                if p != b.F
+                    s = _apply!(b, op, b.F, gelem.sub, cache=cache)
+                    push!(elements, _element!(b, p, s))
+                end
+            end
+            _node!(b, g.header, elements)
+        elseif isright(g.header, f.header) ## f.header is right (sub) of g.header
+            elements = Vector{Element}()
+            for gelem = g.elements
+                p = gelem.prime
+                s = _apply!(b, op, f, gelem.sub, cache=cache)
                 push!(elements, _element!(b, p, s))
             end
-        end
-        _node!(b, f.header, elements)
-    elseif isright(f.header, g.header) ## g.header is right (sub) of f.header
-        elements = Vector{Element}()
-        for felem = f.elements
-            p = felem.prime
-            s = _apply!(b, op, felem.sub, g)
-            push!(elements, _element!(b, p, s))
-        end
-        _node!(b, f.header, elements)
-    elseif isleft(g.header, f.header) ## f.header is left (prime) of g.header
-        elements = Vector{Element}()
-        for gelem = g.elements
-            p = _apply!(b, Val{:and}(), f, gelem.prime)
-            if p != b.F
-                s = _apply!(b, op, b.T, gelem.sub)
+            _node!(b, g.header, elements)
+        else
+            h = findheader(b, f.header, g.header)
+            if isleft(h, f.header) && isright(h, g.header)
+                elements = Vector{Element}()
+                p = f
+                s = _apply!(b, op, b.T, g, cache=cache)
                 push!(elements, _element!(b, p, s))
+                p = not!(b, f, cache=cache)
+                s = _apply!(b, op, b.F, g, cache=cache)
+                push!(elements, _element!(b, p, s))
+                _node!(b, h, elements)
+            elseif isright(h, f.header) && isleft(h, g.header)
+                elements = Vector{Element}()
+                p = g
+                s = _apply!(b, op, f, b.T, cache=cache)
+                push!(elements, _element!(b, p, s))
+                p = not!(b, g, cache=cache)
+                s = _apply!(b, op, f, b.F, cache=cache)
+                push!(elements, _element!(b, p, s))
+                _node!(b, h, elements)
+            else
+                @assert false "Invalid SDD"
             end
         end
-        for gelem = g.elements
-            p = _apply!(b, Val{:and}(), not!(b, f), gelem.prime)
-            if p != b.F
-                s = _apply!(b, op, b.F, gelem.sub)
+    end
+end
+
+function _apply!(b::Forest, op::AbstractOperator, f::AbstractVarTerminalNode, g::AbstractNonTerminalNode; cache::Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode})
+    get!(cache, (f.id, g.id, op.id)) do
+        if isleft(g.header, f.header) # f.header is left (prime) of g.header
+            elements = Vector{Element}()
+            for geleme = g.elements
+                p = _apply!(b, AndOperator(), f, geleme.prime, cache=cache)
+                if p != b.F
+                    s = _apply!(b, op, b.T, geleme.sub, cache=cache)
+                    push!(elements, _element!(b, p, s))
+                end
+            end
+            for geleme = g.elements
+                p = _apply!(b, AndOperator(), not!(b, f, cache=cache), geleme.prime, cache=cache)
+                if p != b.F
+                    s = _apply!(b, op, b.F, geleme.sub, cache=cache)
+                    push!(elements, _element!(b, p, s))
+                end
+            end
+            _node!(b, g.header, elements)
+        elseif isright(g.header, f.header) # f.header is right (sub) of g.header
+            elements = Vector{Element}()
+            for geleme = g.elements
+                p = geleme.prime
+                s = _apply!(b, op, f, geleme.sub, cache=cache)
                 push!(elements, _element!(b, p, s))
             end
+            _node!(b, g.header, elements)
+        else
+            h = findheader(b, f.header, g.header)
+            if isleft(h, f.header) && isright(h, g.header)
+                elements = Vector{Element}()
+                p = f
+                s = _apply!(b, op, b.T, g, cache=cache)
+                push!(elements, _element!(b, p, s))
+                p = not!(b, f, cache=cache)
+                s = _apply!(b, op, b.F, g, cache=cache)
+                push!(elements, _element!(b, p, s))
+                _node!(b, h, elements)
+            elseif isright(h, f.header) && isleft(h, g.header)
+                elements = Vector{Element}()
+                p = g
+                s = _apply!(b, op, f, b.T, cache=cache)
+                push!(elements, _element!(b, p, s))
+                p = not!(b, g, cache=cache)
+                s = _apply!(b, op, f, b.F, cache=cache)
+                push!(elements, _element!(b, p, s))
+                _node!(b, h, elements)
+            else
+                @assert false "Invalid SDD"
+            end
         end
-        _node!(b, g.header, elements)
-    elseif isright(g.header, f.header) ## f.header is right (sub) of g.header
+    end
+end
+
+function _apply!(b::Forest, op::AbstractOperator, f::AbstractNonTerminalNode, g::AbstractVarTerminalNode; cache::Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode})
+    get!(cache, (f.id, g.id, op.id)) do
+        if isleft(f.header, g.header) # g.header is left (prime) of f.header
+            elements = Vector{Element}()
+            for feleme = f.elements
+                p = _apply!(b, AndOperator(), feleme.prime, g, cache=cache)
+                if p != b.F
+                    s = _apply!(b, op, feleme.sub, b.T, cache=cache)
+                    push!(elements, _element!(b, p, s))
+                end
+            end
+            for feleme = f.elements
+                p = _apply!(b, AndOperator(), feleme.prime, not!(b, g, cache=cache), cache=cache)
+                if p != b.F
+                    s = _apply!(b, op, feleme.sub, b.F, cache=cache)
+                    push!(elements, _element!(b, p, s))
+                end
+            end
+            _node!(b, f.header, elements)
+        elseif isright(f.header, g.header) # g.header is right (sub) of f.header
+            elements = Vector{Element}()
+            for feleme = f.elements
+                p = feleme.prime
+                s = _apply!(b, op, feleme.sub, g, cache=cache)
+                push!(elements, _element!(b, p, s))
+            end
+            _node!(b, f.header, elements)
+        else
+            h = findheader(b, f.header, g.header)
+            if isleft(h, f.header) && isright(h, g.header)
+                elements = Vector{Element}()
+                p = f
+                s = _apply!(b, op, b.T, g, cache=cache)
+                push!(elements, _element!(b, p, s))
+                p = not!(b, f, cache=cache)
+                s = _apply!(b, op, b.F, g, cache=cache)
+                push!(elements, _element!(b, p, s))
+                _node!(b, h, elements)
+            elseif isright(h, f.header) && isleft(h, g.header)
+                elements = Vector{Element}()
+                p = g
+                s = _apply!(b, op, f, b.T, cache=cache)
+                push!(elements, _element!(b, p, s))
+                p = not!(b, g, cache=cache)
+                s = _apply!(b, op, f, b.F, cache=cache)
+                push!(elements, _element!(b, p, s))
+                _node!(b, h, elements)
+            else
+                @assert false "Invalid SDD"
+            end
+        end
+    end
+end
+
+function _apply!(b::Forest, op::AbstractOperator, f::AbstractConstantTerminalNode, g::AbstractNonTerminalNode; cache::Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode})
+    get!(cache, (f.id, g.id, op.id)) do
         elements = Vector{Element}()
         for gelem = g.elements
             p = gelem.prime
-            s = _apply!(b, op, f, gelem.sub)
+            s = _apply!(b, op, f, gelem.sub, cache=cache)
             push!(elements, _element!(b, p, s))
         end
         _node!(b, g.header, elements)
-    else
-        h = findheader(b, f.header, g.header)
-        if isleft(h, f.header) && isright(h, g.header)
-            elements = Vector{Element}()
-            p = f
-            s = _apply!(b, op, b.T, g)
-            push!(elements, _element!(b, p, s))
-            p = not!(b, f)
-            s = _apply!(b, op, b.F, g)
-            push!(elements, _element!(b, p, s))
-            _node!(b, h, elements)
-        elseif isright(h, f.header) && isleft(h, g.header)
-            elements = Vector{Element}()
-            p = g
-            s = _apply!(b, op, f, b.T)
-            push!(elements, _element!(b, p, s))
-            p = not!(b, g)
-            s = _apply!(b, op, f, b.F)
-            push!(elements, _element!(b, p, s))
-            _node!(b, h, elements)
-        else
-            @assert false "Invalid SDD"
-        end
     end
 end
 
-function _apply!(b::Forest, op, f::AbstractVarTerminalNode, g::AbstractNonTerminalNode)
-    if isleft(g.header, f.header) # f.header is left (prime) of g.header
+function _apply!(b::Forest, op::AbstractOperator, f::AbstractNonTerminalNode, g::AbstractConstantTerminalNode; cache::Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode})
+    get!(cache, (f.id, g.id, op.id)) do
         elements = Vector{Element}()
-        for geleme = g.elements
-            p = _apply!(b, Val{:and}(), f, geleme.prime)
-            if p != b.F
-                s = _apply!(b, op, b.T, geleme.sub)
-                push!(elements, _element!(b, p, s))
-            end
-        end
-        for geleme = g.elements
-            p = _apply!(b, Val{:and}(), not!(b, f), geleme.prime)
-            if p != b.F
-                s = _apply!(b, op, b.F, geleme.sub)
-                push!(elements, _element!(b, p, s))
-            end
-        end
-        _node!(b, g.header, elements)
-    elseif isright(g.header, f.header) # f.header is right (sub) of g.header
-        elements = Vector{Element}()
-        for geleme = g.elements
-            p = geleme.prime
-            s = _apply!(b, op, f, geleme.sub)
-            push!(elements, _element!(b, p, s))
-        end
-        _node!(b, g.header, elements)
-    else
-        h = findheader(b, f.header, g.header)
-        if isleft(h, f.header) && isright(h, g.header)
-            elements = Vector{Element}()
-            p = f
-            s = _apply!(b, op, b.T, g)
-            push!(elements, _element!(b, p, s))
-            p = not!(b, f)
-            s = _apply!(b, op, b.F, g)
-            push!(elements, _element!(b, p, s))
-            _node!(b, h, elements)
-        elseif isright(h, f.header) && isleft(h, g.header)
-            elements = Vector{Element}()
-            p = g
-            s = _apply!(b, op, f, b.T)
-            push!(elements, _element!(b, p, s))
-            p = not!(b, g)
-            s = _apply!(b, op, f, b.F)
-            push!(elements, _element!(b, p, s))
-            _node!(b, h, elements)
-        else
-            @assert false "Invalid SDD"
-        end
-    end
-end
-
-function _apply!(b::Forest, op, f::AbstractNonTerminalNode, g::AbstractVarTerminalNode)
-    if isleft(f.header, g.header) # g.header is left (prime) of f.header
-        elements = Vector{Element}()
-        for feleme = f.elements
-            p = _apply!(b, Val{:and}(), feleme.prime, g)
-            if p != b.F
-                s = _apply!(b, op, feleme.sub, b.T)
-                push!(elements, _element!(b, p, s))
-            end
-        end
-        for feleme = f.elements
-            p = _apply!(b, Val{:and}(), feleme.prime, not!(b, g))
-            if p != b.F
-                s = _apply!(b, op, feleme.sub, b.F)
-                push!(elements, _element!(b, p, s))
-            end
-        end
-        _node!(b, f.header, elements)
-    elseif isright(f.header, g.header) # g.header is right (sub) of f.header
-        elements = Vector{Element}()
-        for feleme = f.elements
-            p = feleme.prime
-            s = _apply!(b, op, feleme.sub, g)
+        for felem = f.elements
+            p = felem.prime
+            s = _apply!(b, op, felem.sub, g, cache=cache)
             push!(elements, _element!(b, p, s))
         end
         _node!(b, f.header, elements)
-    else
-        h = findheader(b, f.header, g.header)
-        if isleft(h, f.header) && isright(h, g.header)
-            elements = Vector{Element}()
-            p = f
-            s = _apply!(b, op, b.T, g)
-            push!(elements, _element!(b, p, s))
-            p = not!(b, f)
-            s = _apply!(b, op, b.F, g)
-            push!(elements, _element!(b, p, s))
-            _node!(b, h, elements)
-        elseif isright(h, f.header) && isleft(h, g.header)
-            elements = Vector{Element}()
-            p = g
-            s = _apply!(b, op, f, b.T)
-            push!(elements, _element!(b, p, s))
-            p = not!(b, g)
-            s = _apply!(b, op, f, b.F)
-            push!(elements, _element!(b, p, s))
-            _node!(b, h, elements)
-        else
-            @assert false "Invalid SDD"
-        end
     end
-end
-
-function _apply!(b::Forest, op, f::AbstractConstantTerminalNode, g::AbstractNonTerminalNode)
-    elements = Vector{Element}()
-    for gelem = g.elements
-        p = gelem.prime
-        s = _apply!(b, op, f, gelem.sub)
-        push!(elements, _element!(b, p, s))
-    end
-    _node!(b, g.header, elements)
-end
-
-function _apply!(b::Forest, op, f::AbstractNonTerminalNode, g::AbstractConstantTerminalNode)
-    elements = Vector{Element}()
-    for felem = f.elements
-        p = felem.prime
-        s = _apply!(b, op, felem.sub, g)
-        push!(elements, _element!(b, p, s))
-    end
-    _node!(b, f.header, elements)
 end
 
 ### and
 
-function _apply!(b::Forest, ::Val{:and}, f::AbstractVarTerminalNode, g::AbstractVarTerminalNode)
-    if f.header.id == g.header.id && f.value == g.value
-        return f
-    elseif f.header.id == g.header.id && f.value != g.value
-        return b.F
-    else
-        h = findheader(b, f.header, g.header)
-        # println(h)
-        # println(f.header)
-        # println(g.header)
-        # println(isleft(h, f.header))
-        # println(isright(h, f.header))
-        # println(isleft(h, g.header))
-        # println(isright(h, g.header))
-        if isleft(h, f.header) && isright(h, g.header)
-            elements = Vector{Element}()
-            push!(elements, _element!(b, f, g))
-            push!(elements, _element!(b, not!(b, f), b.F))
-            _node!(b, h, elements)
-        elseif isright(h, f.header) && isleft(h, g.header)
-            elements = Vector{Element}()
-            push!(elements, _element!(b, g, f))
-            tmp = not!(b, g)
-            println("not b", tmp.header, tmp.value)
-            push!(elements, _element!(b, not!(b, g), b.F))
-            _node!(b, h, elements)
+function _apply!(b::Forest, ::AndOperator, f::AbstractVarTerminalNode, g::AbstractVarTerminalNode; cache::Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode})
+    get!(cache, (f.id, g.id, :and)) do
+        if f.header.id == g.header.id && f.value == g.value
+            return f
+        elseif f.header.id == g.header.id && f.value != g.value
+            return b.F
         else
-            throw(ArgumentError("Invalid SDD"))
+            h = findheader(b, f.header, g.header)
+            if isleft(h, f.header) && isright(h, g.header)
+                elements = Vector{Element}()
+                push!(elements, _element!(b, f, g))
+                push!(elements, _element!(b, not!(b, f, cache=cache), b.F))
+                _node!(b, h, elements)
+            elseif isright(h, f.header) && isleft(h, g.header)
+                elements = Vector{Element}()
+                push!(elements, _element!(b, g, f))
+                push!(elements, _element!(b, not!(b, g, cache=cache), b.F))
+                _node!(b, h, elements)
+            else
+                throw(ArgumentError("Invalid SDD"))
+            end
         end
     end
 end
 
-function _apply!(b::Forest, ::Val{:and}, f::AbstractConstantTerminalNode, g::AbstractVarTerminalNode)
+function _apply!(b::Forest, ::AndOperator, f::AbstractConstantTerminalNode, g::AbstractVarTerminalNode; cache::Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode})
     if f.value
         return g
     else
@@ -695,7 +734,7 @@ function _apply!(b::Forest, ::Val{:and}, f::AbstractConstantTerminalNode, g::Abs
     end
 end
 
-function _apply!(b::Forest, ::Val{:and}, f::AbstractVarTerminalNode, g::AbstractConstantTerminalNode)
+function _apply!(b::Forest, ::AndOperator, f::AbstractVarTerminalNode, g::AbstractConstantTerminalNode; cache::Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode})
     if g.value
         return f
     else
@@ -703,7 +742,7 @@ function _apply!(b::Forest, ::Val{:and}, f::AbstractVarTerminalNode, g::Abstract
     end
 end
 
-function _apply!(b::Forest, ::Val{:and}, f::AbstractConstantTerminalNode, g::AbstractConstantTerminalNode)
+function _apply!(b::Forest, ::AndOperator, f::AbstractConstantTerminalNode, g::AbstractConstantTerminalNode; cache::Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode})
     if f.value && g.value
         return b.T
     else
@@ -713,30 +752,32 @@ end
 
 ### or
 
-function _apply!(b::Forest, ::Val{:or}, f::AbstractVarTerminalNode, g::AbstractVarTerminalNode)
-    if f.header.id == g.header.id && f.value == g.value
-        return f
-    elseif f.header.id == g.header.id && f.value != g.value
-        return b.T
-    else
-        h = findheader(b, f.header, g.header)
-        if isleft(h, f.header) && isright(h, g.header)
-            elements = Vector{Element}()
-            push!(elements, _element!(b, f, b.T))
-            push!(elements, _element!(b, not!(b, f), g))
-            _node!(b, h, elements)
-        elseif isright(h, f.header) && isleft(h, g.header)
-            elements = Vector{Element}()
-            push!(elements, _element!(b, g, b.T))
-            push!(elements, _element!(b, not!(b, g), f))
-            _node!(b, h, elements)
+function _apply!(b::Forest, ::OrOperator, f::AbstractVarTerminalNode, g::AbstractVarTerminalNode; cache::Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode})
+    get!(cache, (f.id, g.id, :or)) do
+        if f.header.id == g.header.id && f.value == g.value
+            return f
+        elseif f.header.id == g.header.id && f.value != g.value
+            return b.T
         else
-            throw(ArgumentError("Invalid SDD"))
+            h = findheader(b, f.header, g.header)
+            if isleft(h, f.header) && isright(h, g.header)
+                elements = Vector{Element}()
+                push!(elements, _element!(b, f, b.T))
+                push!(elements, _element!(b, not!(b, f, cache=cache), g))
+                _node!(b, h, elements)
+            elseif isright(h, f.header) && isleft(h, g.header)
+                elements = Vector{Element}()
+                push!(elements, _element!(b, g, b.T))
+                push!(elements, _element!(b, not!(b, g, cache=cache), f))
+                _node!(b, h, elements)
+            else
+                throw(ArgumentError("Invalid SDD"))
+            end
         end
     end
 end
 
-function _apply!(b::Forest, ::Val{:or}, f::AbstractConstantTerminalNode, g::AbstractVarTerminalNode)
+function _apply!(b::Forest, ::OrOperator, f::AbstractConstantTerminalNode, g::AbstractVarTerminalNode; cache::Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode})
     if f.value
         return b.T
     else
@@ -744,7 +785,7 @@ function _apply!(b::Forest, ::Val{:or}, f::AbstractConstantTerminalNode, g::Abst
     end
 end
 
-function _apply!(b::Forest, ::Val{:or}, f::AbstractVarTerminalNode, g::AbstractConstantTerminalNode)
+function _apply!(b::Forest, ::OrOperator, f::AbstractVarTerminalNode, g::AbstractConstantTerminalNode; cache::Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode})
     if g.value
         return b.T
     else
@@ -752,7 +793,7 @@ function _apply!(b::Forest, ::Val{:or}, f::AbstractVarTerminalNode, g::AbstractC
     end
 end
 
-function _apply!(b::Forest, ::Val{:or}, f::AbstractConstantTerminalNode, g::AbstractConstantTerminalNode)
+function _apply!(b::Forest, ::OrOperator, f::AbstractConstantTerminalNode, g::AbstractConstantTerminalNode; cache::Dict{Tuple{NodeID,NodeID,Symbol},AbstractNode})
     if f.value || g.value
         return b.T
     else
@@ -763,15 +804,15 @@ end
 ###
 
 function and(f::AbstractNode, g::AbstractNode)
-    _apply!(f.b, Val{:and}(), f, g)
+    _apply!(f.b, AndOperator(), f, g, cache=f.b.cache)
 end
 
 function or(f::AbstractNode, g::AbstractNode)
-    _apply!(f.b, Val{:or}(), f, g)
+    _apply!(f.b, OrOperator(), f, g, cache=f.b.cache)
 end
 
 function not(f::AbstractNode)
-    not!(f.b, f)
+    not!(f.b, f, cache=f.b.cache)
 end
 
 ## override for operations

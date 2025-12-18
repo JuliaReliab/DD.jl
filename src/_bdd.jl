@@ -86,6 +86,8 @@ struct HashKey
     HashKey(a::NodeID, b::NodeID, c::NodeID) = new(a,b,c)
 end
 
+Base.:(==)(a::HashKey, b::HashKey) = a.key1 == b.key1 && a.key2 == b.key2 && a.key3 == b.key3
+Base.isequal(a::HashKey, b::HashKey) = a == b
 Base.hash(mt::HashKey, h::UInt) = Base.hash((mt.key1, mt.key2, mt.key3), h)
 
 """

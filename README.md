@@ -1,10 +1,8 @@
 # DD
 
-[![Build Status](https://travis-ci.com/okamumu/DD.jl.svg?branch=master)](https://travis-ci.com/okamumu/DD.jl)
-[![Codecov](https://codecov.io/gh/okamumu/DD.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/okamumu/DD.jl)
-[![Coveralls](https://coveralls.io/repos/github/okamumu/DD.jl/badge.svg?branch=master)](https://coveralls.io/github/okamumu/DD.jl?branch=master)
-
 DD.jl provides decision diagrams such as BDD, ZDD and MDD.
+
+Note: This is a simple implementation; BDD/ZDD performance is not on par with highly tuned libraries like CUDD.
 
 ## Installation
 

@@ -1,7 +1,7 @@
 name = "DD"
 uuid = "dbd003b0-366b-4bd7-bab8-1704c0e14406"
 authors = ["Hiroyuki Okamura"]
-version = "0.5.4"
+version = "0.5.5"
 
 [deps]
 

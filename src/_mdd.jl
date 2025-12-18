@@ -30,6 +30,7 @@ export isnothing
 export defvar!
 export var!
 export genfunc!
+export clearcache!
 
 export lt!
 export lte!
@@ -140,6 +141,28 @@ struct MDDIf <: AbstractBinaryOperator end
 struct MDDElse <: AbstractBinaryOperator end
 struct MDDUnion <: AbstractBinaryOperator end
 
+# Commutativity flag and cache-key builder for binary operations.
+_iscommutative(::AbstractOperator) = false
+_iscommutative(::MDDMin) = true
+_iscommutative(::MDDMax) = true
+_iscommutative(::MDDPlus) = true
+_iscommutative(::MDDMul) = true
+_iscommutative(::MDDEq) = true
+_iscommutative(::MDDNeq) = true
+_iscommutative(::MDDAnd) = true
+_iscommutative(::MDDOr) = true
+_iscommutative(::MDDUnion) = true
+
+@inline function _hashkey(op::AbstractOperator, fid::NodeID, gid::NodeID)
+    if _iscommutative(op)
+        lo = ifelse(fid < gid, fid, gid)
+        hi = ifelse(fid < gid, gid, fid)
+        return (op, lo, hi)
+    else
+        return (op, fid, gid)
+    end
+end
+
 """
     AbstractPolicy
     FullyReduced <: AbstractPolicy
@@ -216,7 +239,7 @@ mutable struct Forest
     mgr::NodeManager
     hmgr::NodeManager
     headers::Dict{Symbol,NodeHeader}
-    utable::Dict{Tuple{NodeID,Vector{NodeID}},AbstractNode}
+    utable::Dict{Tuple{NodeID,Tuple{Vararg{NodeID}}},AbstractNode}
     vtable::Dict{DomainValue,AbstractNode}
     zero::AbstractTerminalNode{Bool}
     one::AbstractTerminalNode{Bool}
@@ -229,7 +252,7 @@ mutable struct Forest
         b.mgr = NodeManager(0)
         b.hmgr = NodeManager(0)
         b.headers = Dict{Symbol,NodeHeader}()
-        b.utable = Dict{Tuple{NodeID,Vector{NodeID}},AbstractNode}()
+        b.utable = Dict{Tuple{NodeID,Tuple{Vararg{NodeID}}},AbstractNode}()
         b.vtable = Dict{DomainValue,AbstractNode}()
         b.zero = Terminal{Bool}(b, _get_next!(b.mgr), false)
         b.one = Terminal{Bool}(b, _get_next!(b.mgr), true)
@@ -246,6 +269,16 @@ function Base.show(io::IO, b::Forest)
     Base.show(io, "Length of unique table $(length(b.utable))")
     Base.show(io, "Length of cache $(length(b.cache))")
     Base.show(io, "Policy $(b.policy)")
+end
+
+"""
+    clearcache!(b::Forest)
+
+Empty the operation cache in the forest. Useful before running independent large computations to bound memory.
+Does not touch the unique table or value table; node IDs remain stable.
+"""
+function clearcache!(b::Forest)
+    empty!(b.cache)
 end
 
 """
@@ -383,7 +416,8 @@ function _node!(b::Forest, h::NodeHeader, nodes::Vector{AbstractNode}, ::FullyRe
     if _issame(nodes)
         return nodes[1]
     end
-    key = (h.id, [x.id for x = nodes])
+    ids = ntuple(i -> nodes[i].id, length(nodes))
+    key = (h.id, ids)
     get(b.utable, key) do
         id = _get_next!(b.mgr)
         b.utable[key] = Node(b, id, h, nodes)
@@ -514,7 +548,11 @@ end
     apply!(b::Forest, op::AbstractUnaryOperator, f::AbstractNode)
     apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNode, g::AbstractNode)
 
-Return a node as a result for a given operation.
+Apply an MDD operator and return the resulting node.
+
+- Results are memoized in `b.cache`; commutative operators normalize operand order for better hit rate.
+- Mixed literals (`Bool`/`Int`/`Nothing`) are accepted and converted to terminals automatically.
+- The returned node belongs to the same `Forest`, preserving unique-table sharing.
 """
 function apply!(b::Forest, op::AbstractUnaryOperator, f::AbstractNode)
     _apply!(b, op, f)
@@ -551,7 +589,7 @@ function _apply!(b::Forest, op::AbstractUnaryOperator, f::AbstractNonTerminalNod
 end
 
 function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNode, g::AbstractNonTerminalNode)
-    key = (op, f.id, g.id)
+    key = _hashkey(op, f.id, g.id)
     get!(b.cache, key) do
         if f.header.level > g.header.level
             nodes = AbstractNode[_apply!(b, op, x, g) for x = f.nodes]
@@ -567,7 +605,7 @@ function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNo
 end
 
 function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractTerminalNode, g::AbstractNonTerminalNode)
-    key = (op, f.id, g.id)
+    key = _hashkey(op, f.id, g.id)
     get!(b.cache, key) do
         nodes = AbstractNode[_apply!(b, op, f, x) for x = g.nodes]
         node!(b, g.header, nodes)
@@ -575,7 +613,7 @@ function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractTerminalNode,
 end
 
 function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNode, g::AbstractTerminalNode)
-    key = (op, f.id, g.id)
+    key = _hashkey(op, f.id, g.id)
     get!(b.cache, key) do
         nodes = AbstractNode[_apply!(b, op, x, g) for x = f.nodes]
         node!(b, f.header, nodes)
@@ -844,18 +882,22 @@ end
 """
    mdd(policy::AbstractPolicy = FullyReduced())
 
-Create MDD forest with the reduction policy. Note the policy QuasiReduced has not implemented yet.
+Create an MDD `Forest` with the chosen reduction policy.
+
+- `FullyReduced` collapses nodes whose outgoing edges all point to the same child.
+- `QuasiReduced` keeps such nodes (useful when structure matters more than node count).
+The forest owns the unique table, value table, and cache; reuse it across related operations to share nodes.
 """
 mdd(policy::AbstractPolicy = FullyReduced()) = Forest(policy)
 
 """
     defvar!(b::Forest, name::Symbol, level::Int, domain::AbstractVector{DomainValue})
 
-Define a new variable in MDD
-- b: Forest
-- name: Symbol of variable
-- level: Level in MDD
-- domain: Domain of a variable
+Register a variable in the MDD `Forest` at the given level with a discrete domain.
+
+- `level` is an unsigned ordering key; smaller numbers are closer to the terminals.
+- `domain` is copied into the header and used to size outgoing edges of nodes at that level.
+Call once per variable before constructing nodes; repeat calls with the same name overwrite the header.
 """
 function defvar!(b::Forest, name::Symbol, level::Int, domain::AbstractVector{DomainValue})
     h = NodeHeader(_get_next!(b.hmgr), Level(level), name, collect(domain))
@@ -865,9 +907,9 @@ end
 """
     var!(b::Forest, name::Symbol)
 
-Get a node representing that a given variable
-- b: Forest
-- name: Symbol of variable
+Return the canonical node for a single variable taking its domain values on outgoing edges.
+
+The result is reduced according to the forest policy and reused via the unique table, so repeated calls are cheap.
 """
 function var!(b::Forest, name::Symbol)
     var!(b, name, b.policy)

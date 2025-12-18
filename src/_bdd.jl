@@ -27,6 +27,7 @@ export node!
 export defvar!
 export var!
 export genfunc!
+export clearcache!
 
 export not, not!
 export and, and!
@@ -136,6 +137,23 @@ struct EqOperator <: AbstractBinaryOperator
     EqOperator() = new(NodeID(5005))
 end
 
+# Commutativity flag and key builder for binary-op caches.
+_iscommutative(::AbstractOperator) = false
+_iscommutative(::AndOperator) = true
+_iscommutative(::OrOperator) = true
+_iscommutative(::XorOperator) = true
+_iscommutative(::EqOperator) = true
+
+@inline function _hashkey(op::AbstractOperator, fid::NodeID, gid::NodeID)
+    if _iscommutative(op)
+        lo = ifelse(fid < gid, fid, gid)
+        hi = ifelse(fid < gid, gid, fid)
+        return HashKey(op.id, lo, hi)
+    else
+        return HashKey(op.id, fid, gid)
+    end
+end
+
 """
     AbstractPolicy
     FullyReduced <: AbstractPolicy
@@ -229,6 +247,16 @@ function Base.show(io::IO, b::Forest)
     Base.show(io, "Length of unique table $(length(b.utable))")
     Base.show(io, "Length of cache $(length(b.cache))")
     Base.show(io, "Policy $(b.policy)")
+end
+
+"""
+    clearcache!(b::Forest)
+
+Empty the operation cache in the forest. Useful before running independent large computations to bound memory.
+Leaves the unique table untouched; node sharing and IDs are preserved.
+"""
+function clearcache!(b::Forest)
+    empty!(b.cache)
 end
 
 """
@@ -460,7 +488,11 @@ end
     apply!(b::Forest, op::AbstractUnaryOperator, f::AbstractNode)
     apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNode, g::AbstractNode)
 
-Return a node as a result for a given operation.
+Apply a logical operator to one or two BDD nodes and return the resulting node.
+
+- Results are memoized in `b.cache` so repeated calls with the same operands are O(1) after the first.
+- Commutative operators (and/or/xor/eq) normalize operand order to maximize cache hits.
+- Accepts raw `Bool` arguments as sugar; they are converted to terminals.
 """
 function apply!(b::Forest, op::AbstractUnaryOperator, f::AbstractNode)
     return _apply!(b, op, f)
@@ -496,7 +528,7 @@ function _apply!(b::Forest, op::AbstractUnaryOperator, f::AbstractNonTerminalNod
 end
 
 function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNode, g::AbstractNonTerminalNode)
-    key = HashKey(op.id, f.id, g.id)
+    key = _hashkey(op, f.id, g.id)
     get!(b.cache, key) do
         if f.header.level > g.header.level
             low = _apply!(b, op, f.low, g)
@@ -515,7 +547,7 @@ function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNo
 end
 
 function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractTerminalNode, g::AbstractNonTerminalNode)
-    key = HashKey(op.id, f.id, g.id)
+    key = _hashkey(op, f.id, g.id)
     get!(b.cache, key) do
         low = _apply!(b, op, f, g.low)
         high = _apply!(b, op, f, g.high)
@@ -524,7 +556,7 @@ function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractTerminalNode,
 end
 
 function _apply!(b::Forest, op::AbstractBinaryOperator, f::AbstractNonTerminalNode, g::AbstractTerminalNode)
-    key = HashKey(op.id, f.id, g.id)
+    key = _hashkey(op, f.id, g.id)
     get!(b.cache, key) do
         low = _apply!(b, op, f.low, g)
         high = _apply!(b, op, f.high, g)
@@ -546,7 +578,7 @@ function _apply!(b::Forest, op::EqOperator, f::AbstractNonTerminalNode, g::Abstr
     if f === g
         return b.one
     end
-    key = HashKey(op.id, f.id, g.id)
+    key = _hashkey(op, f.id, g.id)
     get(b.cache, key) do
         if f.header.level > g.header.level
             low = _apply!(b, op, f.low, g)
@@ -569,7 +601,7 @@ function _apply!(b::Forest, op::EqOperator, f::AbstractTerminalNode, g::Abstract
     if f === g
         return b.one
     end
-    key = HashKey(op.id, f.id, g.id)
+    key = _hashkey(op, f.id, g.id)
     get(b.cache, key) do
         low = _apply!(b, op, f, g.low)
         high = _apply!(b, op, f, g.high)
@@ -582,7 +614,7 @@ function _apply!(b::Forest, op::EqOperator, f::AbstractNonTerminalNode, g::Abstr
     if f === g
         return b.one
     end
-    key = HashKey(op.id, f.id, g.id)
+    key = _hashkey(op, f.id, g.id)
     get(b.cache, key) do
         low = _apply!(b, op, f.low, g)
         high = _apply!(b, op, f.high, g)
@@ -727,6 +759,9 @@ end
    bdd(policy::AbstractPolicy = FullyReduced())
 
 Create BDD forest with the reduction policy.
+- `FullyReduced` merges nodes whose low/high children are identical.
+- `QuasiReduced` keeps all nodes even if low == high (helpful for certain algorithms that rely on structure).
+The returned `Forest` contains unique-table and cache state; reuse it for related computations.
 """
 bdd(policy::AbstractPolicy = FullyReduced()) = Forest(policy)
 

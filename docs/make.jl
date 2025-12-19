@@ -18,4 +18,5 @@ makedocs(
 
 deploydocs(
     repo = "github.com/JuliaReliab/DD.jl.git",
+    push_preview = false,
 )

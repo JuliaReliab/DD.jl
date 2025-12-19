@@ -1,3 +1,9 @@
+# 0.5.5
+
+- BDD/MDD: cache key normalization and clearcache! API
+- MDD: immutable unique-table keys using tuples
+- Documentation: Documenter.jl support, GitHub Actions for docs build and deployment
+
 # 0.5.4
 
 - add replacenothing for MDD
